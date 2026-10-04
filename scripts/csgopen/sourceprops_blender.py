@@ -284,7 +284,13 @@ def _extract_pak_models(bsp, models: set[str], destination: Path) -> None:
     with zipfile.ZipFile(io.BytesIO(bsp.pakfile)) as archive:
         for name in archive.namelist():
             normalized = name.replace("\\", "/").lower()
-            if any(normalized == stem + extension for stem in stems for extension in (".mdl", ".vvd", ".dx90.vtx", ".phy")):
+            if normalized.startswith("/") or ".." in Path(normalized).parts:
+                continue
+            # Plumber resolves MDL material paths through VMT existence even
+            # when material import is disabled. Keep BSP-local definitions
+            # available so custom props retain their texture bindings.
+            material = normalized.startswith("materials/") and normalized.endswith(".vmt")
+            if material or any(normalized == stem + extension for stem in stems for extension in (".mdl", ".vvd", ".dx90.vtx", ".phy")):
                 target = destination / normalized
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(archive.read(name))

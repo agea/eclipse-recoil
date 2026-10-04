@@ -1280,3 +1280,51 @@ were not modified. These are confirmed startup memory defects; attributing
 the original release's specific crash to either one remains an inference
 until the user tests the corrected app. The release compiler and other
 platforms require CI verification. No commit, push or release was published.
+
+
+## Agency Source BSP conversion (2026-10-04)
+
+The local CS:GO Legacy `cs_agency.bsp` was converted with the direct Source
+backend and installed as the Git-ignored `data/csgopen/cs_agency.zip`.
+The initial prop pass exposed a material lookup gap: the decoder saw BSP-local
+MDL files but not their VMT definitions, collapsing custom materials to an
+unknown placeholder. Staging BSP-local VMTs alongside the requested model
+files preserves those material paths. The final prop pass resolves 131/131
+materials, compared with 35 resolved materials and an unknown placeholder
+before the correction. Texture extraction remains in the existing BSP/VPK
+content store.
+
+Executed on macOS arm64:
+
+- The converter decoded all 178 playable prop models and wrote all 1,185
+  playable instances out of 1,197 source props; the playable envelope excludes
+  the remaining 12. The reduced props contain 305,759 triangles in 33 render
+  tiles; 810 solid props produce 25 collision tiles and 393,864 double-sided
+  collision triangles.
+- World geometry contains 15,392 render triangles, 473/473 resolved materials,
+  47 collision tiles, no water volumes, and 32/32 supported starts.
+  The editor emitted `SOURCEIMPORT_DONE cs_agency` and saved the native MPZ.
+  Logs: `.csgopen/logs/convert-cs_agency.log`,
+  `.csgopen/logs/sourceprops-cs_agency.log`, and
+  `.csgopen/logs/sourceimport-cs_agency.log`.
+- ZIP namespace and extraction checks passed: 819 files, 62,007,391 bytes.
+  An isolated client loaded only the installed ZIP package root, entered TDM,
+  spawned on Alpha and Omega, and reported floor physics for both teams.
+  It emitted **`AGENCY_ZIP_DONE FAILURES 0`** and exited normally.
+  Log: `.csgopen/logs/cs-agency-verify.log`; screenshots:
+  `.csgopen/cs-agency-verify/screenshots/cs_agency-alpha.png` and
+  `.csgopen/cs-agency-verify/screenshots/cs_agency-omega.png`.
+- The full existing network smoke test passed **`SMOKE_DONE FAILURES 0`**
+  against the Agency package, including actual inventory/rules, a 2,997 ms
+  respawn interval and the subsequent switch to Dutility. The server bound
+  to loopback port 28971 with public registration, LAN discovery and HTTP
+  disabled; both test processes stopped on completion. Logs:
+  `.csgopen/logs/cs-agency-network-{server,client}.log`.
+- All 16 Source BSP unit tests and `git diff --check` passed.
+
+Visual inspection confirms textured rooftop and office spawn areas. Lighting,
+transparency and some coplanar panels differ from Source, and the simplified
+prop collision remains approximate. Full route traversal, bot navigation,
+dynamic props and non-TDM entities remain manual checks or converter limits.
+The dedicated-server rotation was not changed; Agency can be selected
+explicitly with `scripts/csgopen/dev.sh server cs_agency`.

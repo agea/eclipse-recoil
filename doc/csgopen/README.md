@@ -156,7 +156,9 @@ panels at the prop/mesh level instead.
 Static props are decoded from the version-10/11 game lump and MDL/VVD/VTX assets
 with Blender plus the Plumber addon. Playable instances are merged into local
 tile models, reduced toward the requested global triangle budget, and textured
-from the BSP pakfile and game VPK. The reducer identifies solid and
+from the BSP pakfile and game VPK. BSP-local VMT definitions are also staged
+for the decoder, preserving material paths on custom map props such as Agency's
+furniture and architectural panels. The reducer identifies solid and
 architectural props and reserves geometry for disconnected panels larger than
 16x32 Source units. This prevents a low global decimation ratio from deleting
 whole wall, door, arch, or window panels while still simplifying bolts, bars,
@@ -194,6 +196,12 @@ reading its MPZ. The original profile excludes this package root. These local
 ZIP packages are ignored by Git. Valve assets are read from the user's local
 game and must not be committed or redistributed without the appropriate
 permission.
+
+With a locally installed `data/csgopen/cs_agency.zip`, launch Agency in TDM:
+
+```sh
+scripts/csgopen/dev.sh tdm cs_agency
+```
 
 ### Valve VMF map converter
 
