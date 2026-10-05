@@ -235,6 +235,8 @@ GVAR(0, PRIV_MODERATOR, votelocktype, 0, 2, 2); // 0 = off, 1 = lock level only,
 GVAR(0, PRIV_MODERATOR, votefilter, 0, 1, 1); // 0 = off, 1 = skip spectators
 GVAR(0, PRIV_MODERATOR, votewait, 0, 2500, VAR_MAX);
 GVAR(0, PRIV_MODERATOR, votestyle, 0, 2, 2); // 0 = votes don't pass mid-match, 1 = passes if votethreshold is met, 2 = passes if unanimous
+GVAR(0, PRIV_MODERATOR, votechoices, 0, 0, 16); // 0 = free proposals, otherwise random shortlist at intermission
+GSVAR(IDF_READONLY, 0, votemaps, "");
 GVAR(0, PRIV_MODERATOR, voteinterm, 0, 2, 3); // 0 = must wait entire time, 1 = passes if votethreshold is met, 2 = passes if unanimous, 3 = passes after waiting then selects a random vote
 GFVAR(0, PRIV_MODERATOR, votethreshold, 0, 0.5f, 1); // auto-pass votes when this many agree
 

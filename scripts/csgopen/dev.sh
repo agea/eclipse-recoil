@@ -121,7 +121,7 @@ case "$command" in
         prerequisites
         content
         binary eclipse-recoil_server_native
-        # The rotation CFG chooses the first map unless explicitly overridden.
+        # The rotation CFG chooses a random starting map unless explicitly overridden.
         MAP=
         if [[ $# -gt 0 && "$1" != -* ]]; then testmap "$@"; shift; fi
         port=${CSGOPEN_PORT:-28801}

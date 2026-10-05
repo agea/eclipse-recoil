@@ -30,5 +30,9 @@ CS:GO movement or weapons.
 - Keep logs, runtime profiles, and local results in `.csgopen/` (Git-ignored).
 - Bind test servers to loopback, without public master registration or cloud
   deployment.
+- The small-group server preset uses a random starting map and three random
+  choices at intermission (`sv_votechoices 3`). Keep the upstream free-vote
+  behavior available with `sv_votechoices 0`; do not include `de_stmarc` in the
+  preset until its conversion has been repaired.
 - Do not perform destructive Git resets, commits, pushes, or publication unless
   requested.

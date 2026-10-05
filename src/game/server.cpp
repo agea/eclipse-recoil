@@ -1692,6 +1692,47 @@ namespace server
         // srvoutf(3, colouryellow, "Server entering phase: %s (delay: %d)", G_S_STR[gamestate], delay);
     }
 
+    void pickvotechoices()
+    {
+        vector<char *> maps;
+        char *list = NULL;
+        maplist(list, gamemode, mutators, numclients(), G(rotatemapsfilter), true);
+        if(list) explodelist(list, maps);
+        DELETEA(list);
+        const char *current = !strncmp(smapname, "maps/", 5) || !strncmp(smapname, "maps\\", 5) ? smapname+5 : smapname;
+        loopvrev(maps) if(!strcmp(maps[i], current))
+        {
+            delete[] maps[i];
+            maps.remove(i);
+        }
+        vector<char> chosen;
+        loopi(G(votechoices))
+        {
+            if(maps.empty()) break;
+            int index = rnd(maps.length());
+            char *name = maps.remove(index);
+            if(!chosen.empty()) chosen.add(' ');
+            chosen.put(name, strlen(name));
+            // Also tolerate duplicate names in a configured rotation.
+            loopvrev(maps) if(!strcmp(maps[i], name))
+            {
+                delete[] maps[i];
+                maps.remove(i);
+            }
+            delete[] name;
+        }
+        maps.deletearrays();
+        chosen.add(0);
+        setmods(sv_votemaps, chosen.getbuf());
+        // Earlier free proposals must not affect this ballot.
+        loopv(clients)
+        {
+            clients[i]->mapvote[0] = '\0';
+            sendf(-1, 1, "ri2", N_CLEARVOTE, clients[i]->clientnum);
+        }
+        srvmsgf(-1, colouryellow, "Vote choices: %s", sv_votemaps);
+    }
+
     bool checkvotes(bool force = false);
     void startintermission(bool req = false)
     {
@@ -1709,7 +1750,11 @@ namespace server
         {
             checkdemorecord(true);
 
-            if(gamestate != G_S_VOTING && G(votelimit)) setphase(G_S_VOTING, G(votelimit));
+            if(gamestate != G_S_VOTING && G(votelimit))
+            {
+                if(G(votechoices)) pickvotechoices();
+                setphase(G_S_VOTING, G(votelimit));
+            }
             else checkvotes(true);
         }
         else setphase(G_S_INTERMISSION, G(intermlimit));
@@ -2931,7 +2976,16 @@ namespace server
             {
                 int mode = G(rotatemode) ? -1 : gamemode, muts = G(rotatemuts) ? -1 : mutators;
                 changemode(mode, muts);
-                const char *map = choosemap(smapname, mode, muts);
+                string selected;
+                const char *map;
+                if(G(votechoices) && *sv_votemaps)
+                {
+                    int len = 0;
+                    const char *elem = indexlist(sv_votemaps, rnd(listlen(sv_votemaps)), len);
+                    copystring(selected, elem, min(len+1, int(sizeof(selected))));
+                    map = selected;
+                }
+                else map = choosemap(smapname, mode, muts);
                 relayf(3, colouryellow, "Server chooses: \fs\fy%s\fS on \fs\fo%s\fS", gamename(mode, muts), map);
                 changemap(map, mode, muts, -1);
             }
@@ -2958,7 +3012,17 @@ namespace server
         modecheck(reqmode, reqmuts);
         if(!m_game(reqmode)) return;
         if(!reqmap || !*reqmap) reqmap = "<random>";
+        if(G(votechoices) && (!strncmp(reqmap, "maps/", 5) || !strncmp(reqmap, "maps\\", 5))) reqmap += 5;
         bool israndom = !strcmp(reqmap, "<random>");
+        if(G(votechoices))
+        {
+            if(gamestate != G_S_VOTING || israndom || reqmode != gamemode || reqmuts != mutators ||
+                listincludes(sv_votemaps, reqmap, strlen(reqmap)) < 0)
+            {
+                srvmsgf(sender, colourred, "Vote for one of the offered maps during the voting period");
+                return;
+            }
+        }
         if(m_local(reqmode) && !ci->local)
         {
             srvmsgf(ci->clientnum, colourred, "Access denied, you must be a local client to start a %s game", gametype[reqmode].name);
@@ -3033,7 +3097,7 @@ namespace server
         ci->modevote = reqmode;
         ci->mutsvote = reqmuts;
         ci->lastvote = totalmillis ? totalmillis : 1;
-        if(hasveto)
+        if(hasveto && !G(votechoices))
         {
             sendpackets(true);
             endmatch();
@@ -3625,6 +3689,7 @@ namespace server
     void changemap(const char *name, int mode, int muts, int clientnum, int voter)
     {
         hasgameinfo = shouldcheckvotes = firstblood = false;
+        setmods(sv_votemaps, "");
         mapgameinfo = mapvoter = voter;
         smapvariant = G(forcemapvariant) ? G(forcemapvariant) : (m_edit(mode) ? MPV_DEFAULT : 1+rnd(MPV_MAX-1));
         stopdemo();

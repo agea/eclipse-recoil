@@ -529,22 +529,29 @@ per profile; do not launch two Eclipse Recoil clients sharing the same profile.
 ### Rotation, voting, and automatic map packages
 
 `scripts/csgopen/dev.sh server` reads `config/csgopen/server-maps.cfg` without
-injecting a fixed starting map. `sv_defaultmap ""` selects the first map from
-`sv_mainmaps`. The initial list mixes `de_bank`, `de_lake`, `de_safehouse`,
-`de_dust2`, `echo`, and `dutility`. Install the converted ZIPs locally before
-including their names. Edit this CFG and restart the server to change the list
-or match settings. The optional `server <map>` argument still explicitly
-overrides the starting map for diagnostics.
+injecting a fixed starting map. With `sv_defaultmap ""` and `sv_rotatemaps 2`,
+the server selects a random starting map from the configured pool. The optional
+`server <map>` argument still overrides the starting map for diagnostics.
 
-The preset uses 10-minute TDM matches without a score limit or overtime,
-followed by 10 seconds of results and up to 20 seconds of voting. Players may
-propose maps in the rotation. Normal multiplayer votes do not pass mid-match;
-the upstream solo-player/veto behavior still permits an immediate change.
-During voting a proposal passes early with 50% of eligible players; at timeout
-the highest vote count wins, with random tie breaking. Without votes, the server
-selects a random map, excluding the most recent map when alternatives exist.
-This is random rotation, not an ordered cycle: the upstream `sv_rotatemaps 1`
-implementation also currently chooses randomly.
+The small-group pool contains 21 native maps (Ennui through Fortitude from the
+local navigation-footprint comparison) and seven converted maps: `ar_baggage`,
+`cs_agency`, `de_bank`, `de_canals`, `de_dust2`, `de_lake`, and `de_safehouse`.
+`de_stmarc` is excluded because its conversion needs repair. Install all seven
+converted ZIPs in `data/csgopen/` before using the pool. Edit the CFG and restart
+the server to change the map list or match settings.
+
+Matches last 10 minutes without a score limit or overtime, followed by 10
+seconds of results and a 20-second ballot. `sv_votechoices 3` draws three
+unique random maps from the rotation, excluding the current map. The server
+synchronizes the shortlist through the read-only `votemaps` variable; updated
+clients show three clickable map previews with titles in the voting panel. Votes must choose one of those
+maps and retain the current mode and mutators. Earlier proposals are cleared,
+and solo players cannot bypass the ballot through the upstream veto shortcut.
+`sv_voteinterm 0` waits for the full ballot: the map with most votes wins,
+ties are resolved randomly, and an empty ballot chooses randomly from the
+three offered maps. Set `sv_votechoices 0` to restore upstream free proposals.
+Both clients and server must be rebuilt for the shortlist menu and validation;
+no new network message or protocol version is required.
 
 The server announces each selected ZIP's name, byte size, CRC32, and HTTP port
 before announcing the map. The TDM client enables `mapautodownload` and checks
@@ -577,6 +584,16 @@ remote hosting, and public/LAN deployment are not configured by the development
 launcher. `CSGOPEN_HTTP_PORT=28889 scripts/csgopen/dev.sh server` changes the
 package port. A deployment profile must bind both gameplay and HTTP listeners
 appropriately and make both ports reachable by its players.
+
+The shortlist smoke test launches isolated native client/server profiles on
+loopback and takes about one minute per run. It checks three distinct choices,
+current-map exclusion, solo-vote timing, and the selected map; `--no-vote`
+checks empty-ballot fallback. Logs stay under `.csgopen/votechoices-test/`.
+
+```sh
+python3 scripts/csgopen/test_votechoices.py
+python3 scripts/csgopen/test_votechoices.py --no-vote
+```
 
 Package regression tests use an isolated loopback server without public registration:
 

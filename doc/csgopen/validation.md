@@ -1523,3 +1523,51 @@ Keyboard/mouse feel, presentation of the climbing animation, narrow irregular
 props and exhaustive traversal on other maps remain manual checks. The test
 requires enough clearance for the full body and a supported landing; it does
 not authorize climbing through ceilings or onto other players.
+
+
+## Small-group rotation and three-map ballot (2026-10-05)
+
+The server preset now has 21 native maps and seven locally converted maps;
+`de_stmarc` is deliberately excluded pending conversion repair. The initial
+map is random. Every ballot offers three distinct random maps excluding the
+current map, retains the current game rules, and runs for the full configured
+20 seconds. Most votes wins; ties and empty ballots resolve randomly, with
+empty ballots restricted to the offered choices.
+
+Executed checks:
+
+- Native client and dedicated-server build completed successfully.
+- All 28 configured map names were unique and had installed native MPZ files
+  or converted ZIPs containing their required MPZ and CFG files.
+- The isolated loopback client/server smoke test passed with
+  `VOTECHOICES_DONE FAILURES 0`: three distinct candidates, current-map
+  exclusion, rejection of an outside proposal, a solo vote waiting for the
+  ballot deadline, loading the voted map, and clearing the shortlist.
+- The empty-ballot smoke test passed with `VOTECHOICES_DONE FAILURES 0`:
+  the server loaded one of the three offered maps and cleared the shortlist.
+- All five existing map-package HTTP regression tests passed.
+- The final voting-panel screenshot was inspected: three distinct buttons
+  render above the vote status without overlapping it.
+
+The existing equal-vote random selection was inspected in `checkvotes`;
+this run did not simulate multiple human voters. Full matches with two teams
+and human mouse interaction remain manual checks. Rebuild both clients and
+server before using the new shortlist UI. Repeat the smoke tests with
+`python3 scripts/csgopen/test_votechoices.py` and the `--no-vote` variant;
+logs and screenshots are retained under `.csgopen/votechoices-test/`.
+
+
+## Map previews in the shortlist (2026-10-05)
+
+The three-map ballot now uses clickable preview cards with map titles instead
+of text-only buttons. It reads the same `maps/<name>.png` previews as the map
+browser and shows a question-mark fallback when an image is unavailable.
+The seven converted-map PNGs were copied from the installed ZIPs into the
+Git-ignored `data/csgopen/maps/` package directory for local preview access
+before a map is mounted. Other clients need their own preview assets.
+
+The isolated native client/server empty-ballot smoke test passed with
+`VOTECHOICES_DONE FAILURES 0`. Its screenshot was inspected and shows all
+three map images and titles, with the vote status below them. This is a
+CubeScript UI change; no native rebuild is required. Human clicking of the
+new cards remains a manual check.
