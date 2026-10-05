@@ -128,6 +128,13 @@ non raggiungibili restano bloccanti. La salita richiede appoggio a terra;
 acqua, scale a pioli, piattaforme mobili e attori enemy conservano il movimento
 ordinario. Le rampe e i gradini ravvicinati usano la soglia per ciascun bordo.
 
+Grounded players and bots already following a walkable slope first try a
+short tangent move with clearance and floor support. If it fails, the normal
+ramp/ledge checks still apply. Walkable slope limits, obstacle heights and
+collision meshes are unchanged. The check is gated by `csgopenmovement` and
+does not apply in liquids, on ladders or to enemy actors. No terrain
+subdivision or displacement LOD change is required.
+
 Durante l’arrampicata l’arma sparisce, salvo la pistola che resta visibile e
 utilizzabile. Le altre armi non possono sparare o ricaricare. Cambio, raccolta e
 rilascio di armi sono bloccati fino alla fine della salita e dell’estrazione:

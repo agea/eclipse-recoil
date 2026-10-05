@@ -78,6 +78,18 @@ original profile keeps automatic traversal disabled. The network protocol is
 now 283, so update clients and servers together. See [movement rules](gameplay.md#movimento)
 and [native checks](validation.md#automatic-obstacle-traversal-and-lower-jumps-2026-10-05).
 
+The TDM proximity mine recognizes valid contact normals on imported triangle
+surfaces even when the engine also reports an internal overlap. It sticks to
+these surfaces rather than detonating at first contact. The 1.5-second arming
+delay and enemy-only proximity trigger are unchanged. This client-side fix
+requires a rebuilt client; converted map packages do not need regeneration.
+
+Grounded TDM players follow connected walkable slope facets with a short
+tangent movement and a support check before the ordinary ramp solver. This
+avoids treating a slope transition as a new ledge. Walls, low ceilings and
+unsupported moves still block traversal. The change leaves terrain meshes,
+displacement LOD and triangle counts unchanged; map ZIPs need no regeneration.
+
 ### Quake 3 / Urban Terror map converter
 
 `scripts/csgopen/q3bsp.py` reads compiled Quake 3 `IBSP` version 46 data
@@ -190,8 +202,16 @@ the triangle budget is a target rather than a strict ceiling.
 This is still not a complete Source runtime. Dynamic props, lightmaps,
 cubemaps, Source shader effects, navigation data and non-spawn gameplay
 entities are not converted. Static props marked solid by Source receive
-invisible triangle-collision carriers built from their reduced render geometry;
-these carriers also participate in bot line-of-sight ray tests. The converter
+invisible triangle-collision carriers built from their reduced render geometry.
+Logs, fallen trees and construction/timber piles instead use a closed convex
+hull built from the undecimated model, independently of the visible mesh. This
+fills small gaps and concave pockets that can trap a walking player. Selection
+uses explicit model-name prefixes; stairs, fences, standing trees, furniture
+and architectural props retain their existing collision to preserve openings.
+The hull follows the same instance rotation and scale as the visible prop;
+it can bridge visible recesses in a pile. Existing map ZIPs must be regenerated
+to apply the change. Prop manifests record the affected models and instances.
+These carriers also participate in bot line-of-sight ray tests. The converter
 does not yet import the original PHY hulls, so collision is approximate, while
 decorative non-solid props remain passable. Consequently a map can retain its
 layout, props and base textures while still showing different lighting or

@@ -36,6 +36,28 @@ def stage():
         if index in (5, 8):
             box(155, 245, y-15, y+15, 512+height+19, 512+height+23)
 
+    # Connected terrain facets, including walkable slopes steeper than floorz.
+    # The production maps are untouched; these meshes only exercise physics.
+    for index, heights in enumerate(((0, 6, 20, 40, 58, 58, 58),
+                                     (0, 14, 42, 82, 110, 124, 124),
+                                     (0, 14, 42, 82, 110, 124, 124),
+                                     (0, 14, 42, 82, 110, 124, 124))):
+        y = 600+80*index
+        for segment in range(len(heights)-1):
+            start = len(vertices)
+            x = 120+40*segment
+            vertices.extend(((x, y-25, 512+heights[segment]),
+                             (x+40, y-25, 512+heights[segment+1]),
+                             (x+40, y+25, 512+heights[segment+1]),
+                             (x, y+25, 512+heights[segment])))
+            for triangle in ((0, 1, 2), (0, 2, 3)):
+                faces.extend((tuple(start+i+1 for i in triangle),
+                              tuple(start+i+1 for i in reversed(triangle))))
+        if index == 2:
+            box(220, 240, y-25, y+25, 512+82, 512+82+16)
+        if index == 3:
+            box(160, 240, y-25, y+25, 512+14+19, 512+14+25)
+
     (MODEL / 'fixture.obj').write_text(
         'g solid\n'+''.join(f'v {-y:g} {z:g} {x:g}\n' for x, y, z in vertices)
         + ''.join('f '+' '.join(map(str, face))+'\n' for face in faces))
@@ -78,7 +100,13 @@ sleep 45000 [echo MOVEMENT_FIXTURE_TIMEOUT; quit]
     (BASE / 'verify/verify.cfg').write_text('''name "Movement fixture"
 showloadoutmenu 0
 tdm csgopen_movement
-sleep 10000 [loop i 10 [movementcase $i]; movementjump; movementdone; sleep 1000 [quit]]
+sleep 10000 [loop i 10 [movementcase $i]; loop i 2 [movementslope $i 1; movementslope $i -1]; movementslope 2 1; movementslope 3 1; movementjump; movementdone; sleep 1000 [quit]]
+sleep 60000 [echo MOVEMENT_TIMEOUT; quit]
+''')
+    (BASE / 'verify/bench.cfg').write_text('''name "Slope benchmark"
+showloadoutmenu 0
+tdm csgopen_movement
+sleep 10000 [loop trial 20 [loop i 2 [movementslope $i 1; movementslope $i -1]]; movementdone; sleep 1000 [quit]]
 sleep 60000 [echo MOVEMENT_TIMEOUT; quit]
 ''')
     print(BASE)

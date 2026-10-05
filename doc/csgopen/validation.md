@@ -1571,3 +1571,136 @@ The isolated native client/server empty-ballot smoke test passed with
 three map images and titles, with the vote status below them. This is a
 CubeScript UI change; no native rebuild is required. Human clicking of the
 new cards remains a manual check.
+
+
+## Continuous timber prop collision (2026-10-05)
+
+Selected Source static props now use a closed convex hull of their undecimated
+local mesh for collision. Render decimation is unchanged. The selection is
+limited to logs, fallen trees and construction/timber piles; architectural
+props keep their existing collision. Hulls fill visible recesses and gaps,
+so they remain an approximation rather than imported Source PHY hulls.
+
+Executed checks:
+
+- Blender background tests: 2 passed, verifying closed manifold edges,
+  filled volume between separated timber pieces, unchanged outer bounds,
+  instance rotation/scale and exclusion of architectural model names.
+- Source BSP regression suite: 20 tests passed.
+- Native Lake conversion completed with `SOURCEIMPORT_DONE de_lake`. All
+  427 playable props decoded successfully; continuous collision applies to
+  one `fallentree_dry01` and three `construction_stack_plywood_01` instances.
+- Installed the regenerated local `data/csgopen/de_lake.zip` after ZIP CRC
+  verification, checking all 140 mapmodel configurations exist and saved
+  `stairheight` remains 5. All 179 existing visual prop files are byte-identical.
+  Existing map previews and ancillary map files were retained. The previous
+  ZIP and verification report are saved under the Git-ignored
+  `.csgopen/map-convert/de_lake-source.BRczCQ/` stage.
+
+Manual walking/climbing on the affected Lake props, especially entering and
+leaving the fallen tree from different directions, remains pending. Other
+installed converted maps have not been regenerated. No actor dimensions or
+movement rules were changed.
+
+
+## Mine placement on imported collision surfaces (2026-10-05)
+
+The native BIH ellipse collision path increments `collideinside` before
+selecting a blocking triangle normal. Projectile impact previously treated
+that count as unresolved penetration, removed `STICK_GEOM`, and killed the
+mine on a valid surface contact. The TDM mine now retains sticky placement
+when a static surface supplies a valid normal. Unresolved overlaps, other
+projectiles and the original gameplay profile retain their existing paths.
+This changes client projectile physics, with no map or protocol change.
+
+Executed checks:
+
+- Reproduced the original failure against Lake's actual collision triangles:
+  `HIT 1 INSIDE 2 NORMAL 0.022 0.026 0.999`, followed by failed sticky placement
+  and armed-trigger checks (`MINE_DONE FAILURES 2`).
+- With the fix, the same Lake contact passes; native Echo reports `INSIDE 0`
+  and also passes. Both logs contain **`MINE_DONE FAILURES 0`**. Checks cover
+  sticky placement without destruction, unchanged fuse, unarmed enemy
+  exclusion, armed enemy triggering, owner/ally exclusion, ordinary bullet
+  impact, the original collision path and unresolved-overlap fallback.
+- Rebuilt the normal native client and dedicated server with
+  `scripts/csgopen/dev.sh build`; isolated test commands are not linked into
+  the normal client. Logs are under `.csgopen/logs/mine-contact-*`.
+- Dedicated loopback smoke test passed with **`SMOKE_DONE FAILURES 0`**,
+  checking synchronized settings, utility inventories, respawn and map change.
+  The first test profile omitted the launcher's TDM `localinit.cfg`, so its
+  loadout was parsed under original rules and five inventory/selection checks
+  failed. Repeating with the standard TDM initialization passed without
+  changing gameplay or the smoke assertions. The initial log is retained.
+  The isolated server on `127.0.0.1:28811` was stopped after testing.
+
+The contact tests use synthetic projectiles against loaded map geometry and
+call the real collision, impact and proximity paths. Launching from physical
+input, wall placement and visual synchronization between two clients remain
+manual checks.
+
+Repeat the fixed contact tests with the opt-in binary:
+
+```sh
+python3 scripts/csgopen/mine-fixture.py
+mine_test_alprefix=$(HOMEBREW_NO_AUTO_UPDATE=1 brew --prefix openal-soft)
+PKG_CONFIG_PATH="$mine_test_alprefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" make -C src -j4 CSGOPEN_MINE_TEST=1 APPCLIENT=../.csgopen/csgopen-mine-test client
+mine_fixture_dir="$PWD/.csgopen/mine-contact-test"
+.csgopen/csgopen-mine-test_native "-h$mine_fixture_dir/lake" "-p$PWD/data/csgopen" "-g$PWD/.csgopen/logs/mine-contact-lake.log" -sm -ss0 -dw640 -dh480 -df0 '-xexec "verify.cfg"'
+.csgopen/csgopen-mine-test_native "-h$mine_fixture_dir/native" "-p$PWD/data/csgopen" "-g$PWD/.csgopen/logs/mine-contact-echo.log" -sm -ss0 -dw640 -dh480 -df0 '-xexec "verify.cfg"'
+```
+
+Lake requires an installed local `data/csgopen/de_lake.zip`. Require
+`MINE_DONE FAILURES 0` in each log, not just a successful client exit.
+
+
+## Slope transitions without terrain subdivision (2026-10-05)
+
+The TDM ledge path prevented the ordinary ramp solver from handling some
+contacts while already moving uphill. Grounded players/bots on a walkable
+slope now first try a tangent move with two bounded collision/support checks.
+If that fails, the ordinary ramp solver and ledge rules remain available.
+Original movement, liquids, ladders and enemy actors retain their paths.
+Terrain meshes, displacement LOD, actor dimensions and slope limits are
+unchanged. No render/collision subdivision or new actor cache was added.
+
+Executed checks:
+
+- Native synthetic fixture covers two connected faceted slopes in both
+  directions, a tall obstacle and a low ceiling on a slope, and the existing
+  ten step/climb cases and jump test. **`MOVEMENT_DONE FAILURES 0`** in
+  `.csgopen/logs/slope-fixed-verify.log`. The unchanged steep uphill case
+  previously reached only 198.821 of 240 units within 8 seconds; the fix
+  reaches 240.250 in 6.91 seconds, without a climb or jump.
+- Twenty repetitions of each of the four open slope routes (80 runs per
+  binary) compare the old and fixed physics against identical geometry.
+  Median combined CPU time for four routes is 13.8975 ms before and
+  13.2150 ms after. This is a local physics microbenchmark, not an FPS
+  benchmark; the old steep uphill route is capped before completing.
+  Per-route results are saved in
+  `.csgopen/movement-fixture/slope-performance.json`.
+- Loaded the installed Lake ZIP and checked four real-map routes. The
+  94.414-unit slope at Y=446.763 is traversed in both directions without
+  climbing. A second candidate at Y=624.453 crosses authored Source
+  player-clip brush 577 (`contents=0x8030000`); both directions still block.
+  Final **`MOVEMENT_DONE FAILURES 0`** is in
+  `.csgopen/logs/slope-lake-verify.log`. Initial tests had assumed this second
+  path was open; its two failures are retained in `slope-lake-initial.log`
+  and were resolved by inspecting the authored clip volume, not by weakening
+  collision.
+- Lake's installed ZIP remains byte-identical: SHA-256
+  `ddd09885448dfb75aed5212d610d7e17bad7101ccf3be06da271b76689ff66ea`,
+  47,712,848 bytes. No installed map package was regenerated or modified.
+- Production native client rebuilt with `scripts/csgopen/dev.sh build`;
+  dedicated server is up to date. Test commands remain opt-in.
+- Dedicated loopback network smoke test passed with **`SMOKE_DONE FAILURES 0`**
+  in `.csgopen/logs/slope-network-smoke.log`, including synchronized settings,
+  utility inventories, respawn and map change. The isolated server on
+  `127.0.0.1:28811` was stopped afterwards.
+
+Repeat the fixture and opt-in build with the movement-test commands above.
+The generated `verify/verify.cfg` now includes slope regressions;
+`verify/bench.cfg` repeats the four open slope routes twenty times.
+Mouse/keyboard feel across all Lake paths and scene-level FPS remain manual
+checks. Authored clip barriers and genuinely steep/non-walkable terrain
+remain intentionally blocking.

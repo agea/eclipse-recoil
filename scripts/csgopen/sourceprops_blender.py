@@ -20,11 +20,40 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import bpy
+import bmesh
 from mathutils import Matrix, Vector
 
 
 MAX_TRIANGLES_PER_MODEL = 12_000
 PROP_TILE_SIZE = 1024.0
+
+
+def _continuous_collision(model: str) -> bool:
+    """Only fill cavities on logs and timber piles, never architectural props."""
+    name = Path(model.replace("\\", "/")).stem.lower()
+    return name.startswith(("fallentree_", "log_", "logs_", "logpile_", "woodpile_", "lumberpile_", "construction_stack_"))
+
+
+def _convex_collision(geometry: ModelGeometry) -> ModelGeometry:
+    """Build a closed local hull independently of render decimation."""
+    points = {point for triangle in geometry.triangles for point in triangle.points}
+    if len(points) < 4:
+        raise ValueError("continuous prop collision needs a solid mesh")
+    mesh = bmesh.new()
+    try:
+        vertices = [mesh.verts.new(point) for point in sorted(points)]
+        result = bmesh.ops.convex_hull(mesh, input=vertices, use_existing_faces=False)
+        unused = set(result["geom_interior"]) | set(result["geom_unused"])
+        bmesh.ops.delete(mesh, geom=list(unused), context="VERTS")
+        if not mesh.faces or any(not edge.is_manifold for edge in mesh.edges):
+            raise ValueError("continuous prop collision hull is not closed")
+        bmesh.ops.triangulate(mesh, faces=list(mesh.faces))
+        return ModelGeometry([
+            LocalTriangle("collision", tuple(tuple(vertex.co) for vertex in face.verts), ((0.0, 0.0),) * 3)
+            for face in mesh.faces
+        ])
+    finally:
+        mesh.free()
 
 
 def _arguments() -> argparse.Namespace:
@@ -382,6 +411,8 @@ def main() -> int:
             args.scale,
         )
         geometry_cache = {}
+        collision_cache = {}
+        continuous_props = 0
         written_props = 0
         solid_props = 0
         for number, prop in enumerate(props, 1):
@@ -397,15 +428,22 @@ def main() -> int:
                     prop.model.lower() in structural_models,
                 )
             geometry = geometry_cache[prop.model.lower()]
+            collision = geometry
+            if prop.solid and _continuous_collision(prop.model):
+                if prop.model.lower() not in collision_cache:
+                    collision_cache[prop.model.lower()] = _convex_collision(_geometry(item[0], 1.0, True))
+                collision = collision_cache[prop.model.lower()]
+                continuous_props += 1
             transform = _source_matrix(prop.angles)
             tile = (math.floor(prop.origin[0] / PROP_TILE_SIZE), math.floor(prop.origin[1] / PROP_TILE_SIZE))
             for triangle in geometry.triangles:
                 points = _transform(triangle, prop, transform)
                 transformed = sourcebsp.Triangle(triangle.material, points, triangle.uvs)
                 writer.add(tile, transformed, triangle.material)
-                if prop.solid:
-                    collision_writer.add(tile, transformed)
             if prop.solid:
+                for triangle in collision.triangles:
+                    points = _transform(triangle, prop, transform)
+                    collision_writer.add(tile, sourcebsp.Triangle(triangle.material, points, triangle.uvs))
                 solid_props += 1
             written_props += 1
             if number % 250 == 0:
@@ -442,6 +480,8 @@ def main() -> int:
             "vertices": sum(part.vertices for part in writer.parts),
             "tile_models": len(writer.parts),
             "solid_props": solid_props,
+            "continuous_collision_props": continuous_props,
+            "continuous_collision_models": sorted(collision_cache),
             "collision_triangles": sum(part.triangles * 2 for part in collision_writer.parts),
             "collision_tile_models": len(collision_writer.parts),
             "simplification_ratio": ratio,

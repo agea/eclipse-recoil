@@ -94,7 +94,7 @@ namespace movementtest
         cleardynentcache();
     });
 
-    ICOMMAND(0, movementroute, "fffff", (float *x, float *y, float *z, float *dx, float *distance),
+    ICOMMAND(0, movementroute, "fffffi", (float *x, float *y, float *z, float *dx, float *distance, int *blocked),
     {
         int clock = lastmillis;
         gameent d;
@@ -115,7 +115,42 @@ namespace movementtest
             if((d.o.x-start)*(*dx) >= *distance) break;
         }
         conoutf(colourwhite, "MOVEMENT_ROUTE Y %.3f DIRECTION %.0f PROGRESS %.3f CLIMBS %d", *y, *dx, (d.o.x-start)*(*dx), climbs);
-        check((d.o.x-start)*(*dx) >= *distance && !climbs, "canals_stairs_without_climb_or_jump");
+        if(*blocked) check((d.o.x-start)*(*dx) < *distance && !climbs, "authored_playerclip_blocks_route");
+        else check((d.o.x-start)*(*dx) >= *distance && !climbs, "supported_route_without_climb_or_jump");
+        lastmillis = clock;
+        cleardynentcache();
+    });
+
+    ICOMMAND(0, movementslope, "ii", (int *which, int *direction),
+    {
+        if(*which < 0 || *which > 3 || (*direction != 1 && *direction != -1)) return;
+        int clock = lastmillis;
+        gameent d;
+        actor(d, 600+80*(*which), W_SMG);
+        float height = *which ? 124 : 58;
+        d.o = vec(*direction > 0 ? 100 : 350, 600+80*(*which), 512+d.height+(*direction > 0 ? 0 : height)+0.05f);
+        d.vel = d.falling = vec(0, 0, 0);
+        d.yaw = *direction > 0 ? 270 : 90;
+        loopi(100) physics::moveplayer(&d, 10, false, 5);
+        float start = d.o.x;
+        d.move = 1;
+        int climbs = 0;
+        int frames = 0;
+        bool previous = false;
+        Uint64 begin = SDL_GetPerformanceCounter();
+        loopi(1600)
+        {
+            lastmillis = clock+i*5;
+            physics::moveplayer(&d, 10, true, 5);
+            if(d.climbing && !previous) climbs++;
+            previous = d.climbing;
+            frames++;
+            if((d.o.x-start)*(*direction) >= 240) break;
+        }
+        Uint64 micros = (SDL_GetPerformanceCounter()-begin)*1000000/SDL_GetPerformanceFrequency();
+        conoutf(colourwhite, "MOVEMENT_SLOPE %d DIR %d PROGRESS %.3f Z %.3f CLIMBS %d FRAMES %d CPU_US %lld", *which, *direction, (d.o.x-start)*(*direction), d.feetpos().z, climbs, frames, (long long)micros);
+        if(*which < 2) check((d.o.x-start)*(*direction) >= 240 && !climbs, "continuous_slope_without_climb_or_jump");
+        else check((d.o.x-start)*(*direction) < 240 && !climbs, "slope_obstacle_still_blocks");
         lastmillis = clock;
         cleardynentcache();
     });

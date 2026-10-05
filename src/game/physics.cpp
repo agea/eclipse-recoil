@@ -958,10 +958,36 @@ namespace physics
 
                 d->o = old;
                 bool lowledge = false;
-                if(!collideplayer && trytraverse((gameent *)d, dir, local, lowledge)) return true;
+                // A grounded actor already following a slope should use the
+                // ordinary smooth ramp solver, not probe it as a new ledge.
+                bool smoothslope = csgopenmovement && ((gameent *)d)->actortype < A_ENEMY && !collideplayer
+                    && d->physstate >= PHYS_SLOPE && d->physstate <= PHYS_STEP_DOWN && !liquidcheck(d) && !laddercheck(d)
+                    && d->floor.z >= slopez && d->floor.z < 1.0f && obstacle.z >= slopez;
+                if(smoothslope && !collideplayer)
+                {
+                    vec rampdir(dir);
+                    rampdir.projectxy(obstacle);
+                    d->o = vec(old).add(rampdir).addz(0.05f);
+                    if(!collide(d, rampdir))
+                    {
+                        d->o.z -= 0.15f;
+                        if(collide(d, vec(0, 0, -1), slopez) && !collideplayer)
+                        {
+                            vec support(collidewall);
+                            d->o.z += 0.15f;
+                            switchfloor(d, dir, support);
+                            d->floor = support;
+                            d->physstate = support.z >= floorz ? PHYS_FLOOR : PHYS_SLOPE;
+                            d->airmillis = 0;
+                            return true;
+                        }
+                    }
+                    d->o = old;
+                }
+                if(!smoothslope && !collideplayer && trytraverse((gameent *)d, dir, local, lowledge)) return true;
                 d->o.z -= stairheight;
                 d->zmargin = -stairheight;
-                if((!csgopenmovement || ((gameent *)d)->actortype >= A_ENEMY || lowledge) &&
+                if((!csgopenmovement || ((gameent *)d)->actortype >= A_ENEMY || lowledge || smoothslope) &&
                     (d->physstate == PHYS_SLOPE || d->physstate == PHYS_FLOOR || (collide(d, vec(0, 0, -1), slopez) && (d->physstate == PHYS_STEP_UP || d->physstate == PHYS_STEP_DOWN || collidewall.z >= floorz))))
                 {
                     d->o = old;
@@ -977,6 +1003,7 @@ namespace physics
                         }
                         return true;
                     }
+                    if(smoothslope && !collideplayer && trytraverse((gameent *)d, dir, local, lowledge)) return true;
                 }
                 else
                 {

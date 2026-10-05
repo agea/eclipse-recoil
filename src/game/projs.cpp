@@ -1854,6 +1854,12 @@ namespace projs
         int collidemod = proj.projcollide;
         proj.norm = norm;
 
+        // BIH triangle contacts increment collideinside even when a blocking
+        // surface normal was found. Keep TDM mines sticky on that contact;
+        // only unresolved overlaps should take the penetration fallback.
+        if(csgopenweapons && proj.projtype == PROJ_SHOT && proj.weap == W_MINE && !proj.child
+            && !d && collidemod&STICK_GEOM && !norm.iszero()) inside = 0;
+
         if(inside)
         {
             vec oldpos = proj.o;
