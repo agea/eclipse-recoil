@@ -4357,7 +4357,7 @@ namespace game
         else
         {
             float weapscale = actors[d->actortype].weapscale;
-            bool showweap = (third != 2 || firstpersoncamera) && isweap(weap) && weap < W_ALL;
+            bool showweap = (third != 2 || firstpersoncamera) && isweap(weap) && weap < W_ALL && !d->climbweaponhidden();
             if(showweap)
             {
                 mdl.basetime = d->weaptime[weap];
@@ -4366,7 +4366,7 @@ namespace game
                     case W_S_SWITCH: case W_S_USE:
                     {
                         int millis = lastmillis-d->weaptime[weap], off = min(d->weapwait[weap] / 4, 250),
-                            lastweap = d->getlastweap(m_weapon(d->actortype, gamemode, mutators));
+                            lastweap = csgopenmovement && lastmillis < d->climbdrawuntil ? weap : d->getlastweap(m_weapon(d->actortype, gamemode, mutators));
                         if(!isweap(lastweap) || lastweap != weap)
                         {
                             if(isweap(lastweap) && millis <= off)
@@ -4420,6 +4420,11 @@ namespace game
                         break;
                     }
                 }
+            }
+            if(d->climbweaponhidden())
+            {
+                mdl.basetime = d->climbstart;
+                mdl.anim = ANIM_VAULT|ANIM_CLAMP;
             }
             if(third && (mdl.anim&ANIM_IDLE) && lastmillis - d->lastpain <= 300)
             {

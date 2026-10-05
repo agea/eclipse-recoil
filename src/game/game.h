@@ -5,7 +5,7 @@
 #include "mappackage.h"
 
 #define VERSION_GAMEID "fps"
-#define VERSION_GAME 282
+#define VERSION_GAME 283
 #define VERSION_DEMOMAGIC "RED_ECLIPSE_DEMO"
 
 #define MAXAI 256
@@ -325,7 +325,7 @@ ENUM_VAR(IM_T_ROLLER, (1<<IM_T_JUMP)|(1<<IM_T_WALLRUN)|(1<<IM_T_VAULT));
 #define SPHY_ENUM(en, um) \
     en(um, Jump, JUMP) en(um, Boost, BOOST) en(um, Dash, DASH) en(um, Slide, SLIDE) en(um, Launch, LAUNCH) en(um, Melee, MELEE) en(um, Kick, KICK) en(um, Grab, GRAB) \
     en(um, Wallrun, WALLRUN) en(um, Vault, VAULT) en(um, Pound, POUND) en(um, Material, MATERIAL) en(um, Prize, PRIZE) en(um, Switch, SWITCH) en(um, Extinguish, EXTINGUISH) \
-    en(um, Buff, BUFF) en(um, Hacked, HACKED) en(um, Max, MAX)
+    en(um, Buff, BUFF) en(um, Hacked, HACKED) en(um, Climb, CLIMB) en(um, ClimbEnd, CLIMBEND) en(um, Max, MAX)
 ENUM_DLN(SPHY);
 ENUM_VAR(SPHY_SERVER, (1<<SPHY_EXTINGUISH)|(1<<SPHY_BUFF)|(1<<SPHY_HACKED));
 
@@ -715,6 +715,8 @@ struct clientstate
     int lastdeath, lastspawn, lastpain, lastregen, lastregenamt, lastbuff, lastshoot, lastcook, lastaffinity, lastres[W_R_MAX], lastrestime[W_R_MAX], lasthacker;
     float weapbloom[W_MAX];
     int weapbloomtime[W_MAX];
+    int climbstart, climbdrawuntil;
+    bool climbing;
     int burntime, burndelay, burndamage, bleedtime, bleeddelay, bleeddamage, shocktime, shockdelay, shockdamage, shockstun, shockstuntime, corrodetime, corrodedelay, corrodedamage;
     float shockstunscale, shockstunfall;
     int actortype, spawnpoint, ownernum, skill, points, frags, deaths, totalpoints, totalfrags, totaldeaths, spree, lasttimeplayed, timeplayed, cpmillis, cptime, queuepos, hasprize;
@@ -734,6 +736,8 @@ struct clientstate
         randweap.shrink(0);
         cpnodes.shrink(0);
         resetresidual();
+        climbing = false;
+        climbstart = climbdrawuntil = 0;
         loopi(W_MAX) { weapbloom[i] = 0; weapbloomtime[i] = 0; }
     }
     ~clientstate() {}
@@ -869,7 +873,12 @@ struct clientstate
                 weapammo[i][W_A_STORE] = 0;
             }
         }
-        if(full) lastweap.shrink(0);
+        if(full)
+        {
+            lastweap.shrink(0);
+            climbing = false;
+            climbstart = climbdrawuntil = 0;
+        }
     }
 
     float getweapbloom(int weap, int millis, float limit, int recovery) const
@@ -941,8 +950,39 @@ struct clientstate
         return G(csgopenweapons) && (weapselect == W_GRENADE || weapselect == W_ROCKET) && weapstate[weapselect] == W_S_POWER;
     }
 
+    bool climbweaponhidden() const
+    {
+        return G(csgopenmovement) && climbing && weapselect != W_PISTOL;
+    }
+
+    bool climbweaponblocked(int weap, int millis) const
+    {
+        return G(csgopenmovement) && ((climbing && weap != W_PISTOL) || millis < climbdrawuntil);
+    }
+
+    void beginclimb(int millis)
+    {
+        climbing = true;
+        climbstart = millis;
+        if(isweap(weapselect) && weapselect != W_PISTOL)
+            setweapstate(weapselect, W_S_WAIT, G(csgopenclimbtime), millis, 0, true);
+    }
+
+    void endclimb(int millis)
+    {
+        if(!climbing) return;
+        climbing = false;
+        if(isweap(weapselect) && weapselect != W_PISTOL)
+        {
+            int delay = W(weapselect, delayswitch);
+            climbdrawuntil = millis + delay;
+            setweapstate(weapselect, W_S_SWITCH, delay, millis, 0, true);
+        }
+    }
+
     bool candrop(int weap, int sweap, int millis, bool classic, int skip = 0)
     {
+        if(G(csgopenmovement) && (climbing || millis < climbdrawuntil)) return false;
         if(cookinghe() || cookingsmoke()) return false;
         if(!(A(actortype, abilities)&(1<<A_A_AMMO))) return false;
 
@@ -955,6 +995,7 @@ struct clientstate
 
     bool canswitch(int weap, int sweap, int millis, int skip = 0)
     {
+        if(G(csgopenmovement) && (climbing || millis < climbdrawuntil)) return false;
         if(cookinghe() || cookingsmoke()) return false;
         if(!isweap(weap)) return false;
 
@@ -965,6 +1006,7 @@ struct clientstate
 
     bool canshoot(int weap, int flags, int sweap, int millis, int skip = 0)
     {
+        if(climbweaponblocked(weap, millis)) return false;
         if(G(csgopenweapons) && WS(flags) && weap != W_RIFLE) return false;
         if(!(A(actortype, abilities)&(WS(flags) ? (1<<A_A_SECONDARY) : (1<<A_A_PRIMARY)))) return false;
 
@@ -976,6 +1018,7 @@ struct clientstate
 
     bool canreload(int weap, int sweap, bool check = false, int millis = 0, int skip = 0)
     {
+        if(check && climbweaponblocked(weap, millis)) return false;
         if((W(weap, ammostore) < 0 || weapammo[weap][W_A_STORE] > 0 || !(A(actortype, abilities)&(1<<A_A_AMMO)))
                 && (!check || (weap == weapselect && hasweap(weap, sweap) && weapammo[weap][W_A_CLIP] < W(weap, ammoclip) && weapstate[weap] != W_S_ZOOM && weapwaited(weap, millis, skip))))
             return true;
@@ -984,6 +1027,7 @@ struct clientstate
 
     bool canuseweap(int gamemode, int mutators, int attr, int sweap, int millis, int skip = 0, bool full = true)
     {
+        if(G(csgopenmovement) && (climbing || millis < climbdrawuntil)) return false;
         if(cookinghe() || cookingsmoke()) return false;
         if(G(csgopenweapons) && (csgopenutility(attr) || !hasweap(attr, sweap))) return false;
         if(!(A(actortype, abilities)&(1<<A_A_AMMO))) return false;
@@ -1062,6 +1106,8 @@ struct clientstate
 
     void clearstate()
     {
+        climbing = false;
+        climbstart = climbdrawuntil = 0;
         loopi(2) if(colours[i] < 0) colours[i] = rnd(0xFFFFFF);
         if(model < 0) model = rnd(PLAYERTYPES);
         spree = lastdeath = lastpain = lastregen = lastregenamt = lastbuff = lastshoot = lastcook = lastaffinity = hasprize = 0;
@@ -1445,6 +1491,8 @@ struct gameent : dynent, clientstate
     float deltayaw, deltapitch, newyaw, newpitch, stunscale, stungravity, turnangle[3], lastyaw, lastpitch;
     bool action[AC_MAX], conopen, k_up, k_down, k_left, k_right, obliterated, headless;
     vec tag[TAG_MAX];
+    vec climbfrom, climbto, climbvel;
+    int climbelapsed;
     vec2 rotvel;
     string hostip, name, handle, steamid, info, obit;
     vector<gameent *> dominator;
@@ -1844,6 +1892,10 @@ struct gameent : dynent, clientstate
 
     void clearstate(int millis, int gamemode, int mutators)
     {
+        climbing = false;
+        climbstart = climbdrawuntil = 0;
+        climbelapsed = -1;
+        climbfrom = climbto = climbvel = vec(0, 0, 0);
         inmaterial = lasthit = lastkill = quake = turnside = 0;
         loopi(3)
         {

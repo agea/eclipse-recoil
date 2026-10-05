@@ -778,7 +778,167 @@ namespace physics
         return found;
     }
 
-    bool move(physent *d, vec &dir)
+    bool cleartraversepath(physent *d, const vec &from, const vec &to)
+    {
+        vec old(d->o), delta = vec(to).sub(from);
+        int steps = max(int(ceilf(delta.magnitude()/0.5f)), 1);
+        loopi(steps)
+        {
+            d->o = vec(from).add(vec(delta).mul(float(i+1)/steps));
+            // Tangential contact with the wall we are climbing is allowed;
+            // collideinside also counts such contacts, without blocking motion.
+            if(collide(d, delta))
+            {
+                d->o = old;
+                return false;
+            }
+        }
+        d->o = old;
+        return true;
+    }
+
+    bool traversestand(physent *d, const vec &base, float maxrise, vec &stand, vec &support, bool needsupport = true)
+    {
+        vec old(d->o);
+        float low = 0, high = 0;
+        bool found = false;
+        // Search from below, so a ceiling above the ledge does not hide a
+        // lower valid standing position. Refine the first clear interval.
+        for(float rise = 0.5f; rise <= maxrise+0.5f; rise += 0.5f)
+        {
+            high = min(rise, maxrise+0.05f);
+            d->o = vec(base).addz(high);
+            if(!collide(d) && !collideinside) { found = true; break; }
+            low = high;
+        }
+        if(found)
+        {
+            loopi(10)
+            {
+                float middle = (low+high)*0.5f;
+                d->o = vec(base).addz(middle);
+                if(collide(d) || collideinside) low = middle;
+                else high = middle;
+            }
+            stand = vec(base).addz(high+0.02f);
+            if(needsupport)
+            {
+                d->o = vec(stand).subz(0.15f);
+                found = collide(d, vec(0, 0, -1), floorz) && !collideplayer && collidewall.z >= floorz && high <= maxrise+0.05f;
+                if(found) support = collidewall;
+            }
+        }
+        d->o = old;
+        return found;
+    }
+
+    void finishclimb(gameent *d, bool local, bool landed)
+    {
+        d->climbelapsed = -1;
+        d->endclimb(lastmillis);
+        d->vel = landed ? d->climbvel : vec(0, 0, 0);
+        d->falling = vec(0, 0, 0);
+        d->physstate = landed ? PHYS_FLOOR : PHYS_FALL;
+        d->floor = vec(0, 0, 1);
+        d->airmillis = landed ? 0 : max(lastmillis, 1);
+        if(local && d->clientnum >= 0)
+            client::addmsg(N_SPHY, "ri3", d->clientnum, SPHY_CLIMBEND, lastmillis-game::maptime);
+    }
+
+    bool trytraverse(gameent *d, const vec &dir, bool local, bool &lowledge)
+    {
+        lowledge = false;
+        if(!csgopenmovement || d->state != CS_ALIVE || d->actortype >= A_ENEMY ||
+            d->physstate < PHYS_SLOPE || d->physstate > PHYS_STEP_DOWN ||
+            d->vel.z+d->falling.z > 1 || !(d->move || d->strafe) ||
+            liquidcheck(d) || laddercheck(d) || entities::currentpassenger(d)) return false;
+
+        vec old(d->o), horizontal(dir.x, dir.y, 0), stand, support;
+        if(horizontal.squaredlen() <= 1e-8f) return false;
+        float step = csgopenstepheight*d->curscale;
+        float limit = csgopenclimbheight*d->curscale;
+        vec direction = vec(horizontal).normalize();
+        vec probe = vec(direction).mul(d->radius+0.2f), ledge, ledgenormal;
+        // Measure the actual tread, rather than the rounded collision contact
+        // near its edge, to keep a waist-height ledge out of the fast-step path.
+        // A rounded stair edge can have a sloping contact normal before the
+        // feet reach its tread. Classifying its height only needs body clearance;
+        // the fast step and the climb destination still require floor support.
+        if(!traversestand(d, vec(old).add(probe), limit, ledge, ledgenormal, false)) return false;
+        lowledge = ledge.z-old.z <= step+0.05f;
+        if(lowledge && traversestand(d, vec(old).add(horizontal), step, stand, support))
+        {
+            vec raised(old.x, old.y, stand.z);
+            if(cleartraversepath(d, old, raised) && cleartraversepath(d, raised, stand))
+            {
+                d->o = stand;
+                d->floor = support;
+                d->physstate = PHYS_FLOOR;
+                d->falling = vec(0, 0, 0);
+                d->airmillis = 0;
+                return true; // horizontal displacement and velocity are unchanged
+            }
+        }
+
+        if(!local || d->climbing || lastmillis < d->climbdrawuntil || d->cookinghe() || d->cookingsmoke() ||
+            (isweap(d->weapselect) && d->weapselect != W_PISTOL && !d->weapwaited(d->weapselect, lastmillis))) return false;
+        if(lowledge || limit <= step) return false;
+        vec ahead = vec(direction).mul(2*d->radius+1);
+        if(!traversestand(d, vec(old).add(ahead), limit, stand, support)) return false;
+        vec raised(old.x, old.y, stand.z);
+        if(!cleartraversepath(d, old, raised) || !cleartraversepath(d, raised, stand)) return false;
+
+        d->climbfrom = old;
+        d->climbto = stand;
+        d->climbvel = vec(d->vel.x, d->vel.y, 0);
+        d->climbelapsed = 0;
+        d->beginclimb(lastmillis);
+        d->vel = d->falling = vec(0, 0, 0);
+        if(d->clientnum >= 0)
+            client::addmsg(N_SPHY, "ri3", d->clientnum, SPHY_CLIMB, lastmillis-game::maptime);
+        return true;
+    }
+
+    bool updateclimb(gameent *d, bool local, int millis)
+    {
+        if(d->climbelapsed < 0) return false;
+        if(!csgopenmovement || d->state != CS_ALIVE || liquidcheck(d))
+        {
+            finishclimb(d, local, false);
+            return false;
+        }
+        d->climbelapsed += millis;
+        float amount = min(d->climbelapsed/float(csgopenclimbtime), 1.0f);
+        vec next(d->climbfrom);
+        if(amount < 0.6f)
+        {
+            float t = amount/0.6f;
+            next.z += (d->climbto.z-d->climbfrom.z)*(t*t*(3-2*t));
+        }
+        else
+        {
+            float t = (amount-0.6f)/0.4f;
+            next.lerp(vec(d->climbfrom.x, d->climbfrom.y, d->climbto.z), d->climbto, t*t*(3-2*t));
+        }
+        if(!cleartraversepath(d, d->o, next))
+        {
+            finishclimb(d, local, false);
+            return false;
+        }
+        d->o = next;
+        d->vel = d->falling = vec(0, 0, 0);
+        if(amount >= 1)
+        {
+            d->o.z -= 0.15f;
+            bool landed = collide(d, vec(0, 0, -1), floorz) && collidewall.z >= floorz;
+            d->o = next;
+            finishclimb(d, local, landed);
+        }
+        updatedynentcache(d);
+        return true;
+    }
+
+    bool move(physent *d, vec &dir, bool local = false)
     {
         vec old(d->o), obstacle(0, 0, 0);
         d->o.add(dir);
@@ -797,14 +957,26 @@ namespace physics
                 }
 
                 d->o = old;
+                bool lowledge = false;
+                if(!collideplayer && trytraverse((gameent *)d, dir, local, lowledge)) return true;
                 d->o.z -= stairheight;
                 d->zmargin = -stairheight;
-                if(d->physstate == PHYS_SLOPE || d->physstate == PHYS_FLOOR  || (collide(d, vec(0, 0, -1), slopez) && (d->physstate == PHYS_STEP_UP || d->physstate == PHYS_STEP_DOWN || collidewall.z >= floorz)))
+                if((!csgopenmovement || ((gameent *)d)->actortype >= A_ENEMY || lowledge) &&
+                    (d->physstate == PHYS_SLOPE || d->physstate == PHYS_FLOOR || (collide(d, vec(0, 0, -1), slopez) && (d->physstate == PHYS_STEP_UP || d->physstate == PHYS_STEP_DOWN || collidewall.z >= floorz))))
                 {
                     d->o = old;
                     d->zmargin = 0;
-                    if(trystepup(d, dir, obstacle, stairheight, d->physstate == PHYS_SLOPE || d->physstate == PHYS_FLOOR ? d->floor : vec(collidewall)))
+                    if(trystepup(d, dir, obstacle, lowledge ? csgopenstepheight*d->curscale : stairheight, d->physstate == PHYS_SLOPE || d->physstate == PHYS_FLOOR ? d->floor : vec(collidewall)))
+                    {
+                        if(lowledge)
+                        {
+                            vec stepped(d->o);
+                            d->o.x = old.x+dir.x;
+                            d->o.y = old.y+dir.y;
+                            if(collide(d, vec(dir.x, dir.y, 0))) d->o = stepped;
+                        }
                         return true;
+                    }
                 }
                 else
                 {
@@ -1432,6 +1604,7 @@ namespace physics
 
     bool moveplayer(physent *d, int moveres, bool local, int millis)
     {
+        if(gameent::is(d) && updateclimb((gameent *)d, local, millis)) return true;
         bool floating = isfloating(d);
         float secs = millis/1000.f;
 
@@ -1452,7 +1625,11 @@ namespace physics
 
             vel.mul(1.0f / moveres);
 
-            loopi(moveres) if(!move(d, vel)) { if(++collisions < 5) i--; } // discrete steps collision detection & sliding
+            loopi(moveres)
+            {
+                if(!move(d, vel, local)) { if(++collisions < 5) i--; }
+                if(gameent::is(d) && ((gameent *)d)->climbelapsed >= 0) break;
+            }
 
             if(gameent::is(d) && !d->airmillis)
             {

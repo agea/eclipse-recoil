@@ -79,6 +79,12 @@ namespace server
         void process(clientinfo *ci);
     };
 
+    struct climbevent : timedevent
+    {
+        bool finish;
+        void process(clientinfo *ci);
+    };
+
     struct cookevent : timedevent
     {
         int id, weap, etype, offtime;
@@ -2545,7 +2551,7 @@ namespace server
         ci->spawnstate(gamemode, mutators, weap, health);
         ci->updatetimeplayed();
 
-        sendf(ci->clientnum, 1, "ri9i5vv", N_SPAWNSTATE, ci->clientnum, spawn, ci->state, ci->points, ci->frags, ci->deaths, ci->totalpoints, ci->totalfrags, ci->totaldeaths, ci->timeplayed, ci->health, ci->cptime, ci->weapselect, W_MAX*W_A_MAX, &ci->weapammo[0][0], W_MAX, &ci->weapent[0]);
+        sendf(ci->clientnum, 1, "ri9i5vvi3", N_SPAWNSTATE, ci->clientnum, spawn, ci->state, ci->points, ci->frags, ci->deaths, ci->totalpoints, ci->totalfrags, ci->totaldeaths, ci->timeplayed, ci->health, ci->cptime, ci->weapselect, W_MAX*W_A_MAX, &ci->weapammo[0][0], W_MAX, &ci->weapent[0], 0, 0, 0);
 
         ci->lastspawn = gamemillis;
     }
@@ -2567,6 +2573,9 @@ namespace server
         putint(p, ci->weapselect);
         loopi(W_MAX) loopj(W_A_MAX) putint(p, ci->weapammo[i][j]);
         loopi(W_MAX) putint(p, ci->weapent[i]);
+        putint(p, ci->climbing && ci->state == CS_ALIVE ? 1 : 0);
+        putint(p, ci->climbing ? max(gamemillis-ci->climbstart, 0) : 0);
+        putint(p, max(ci->climbdrawuntil-gamemillis, 0));
     }
 
     void listdemos(int cn)
@@ -4094,7 +4103,7 @@ namespace server
             default: break;
         }
         ci->updatetimeplayed();
-        sendf(target, 1, "ri9i4vvi", N_RESUME, ci->clientnum, state, ci->points, ci->frags, ci->deaths, ci->totalpoints, ci->totalfrags, ci->totaldeaths, ci->timeplayed, ci->health, ci->cptime, ci->weapselect, W_MAX*W_A_MAX, &ci->weapammo[0][0], W_MAX, &ci->weapent[0], -1);
+        sendf(target, 1, "ri9i4vvi4", N_RESUME, ci->clientnum, state, ci->points, ci->frags, ci->deaths, ci->totalpoints, ci->totalfrags, ci->totaldeaths, ci->timeplayed, ci->health, ci->cptime, ci->weapselect, W_MAX*W_A_MAX, &ci->weapammo[0][0], W_MAX, &ci->weapent[0], ci->climbing && ci->state == CS_ALIVE ? 1 : 0, ci->climbing ? max(gamemillis-ci->climbstart, 0) : 0, max(ci->climbdrawuntil-gamemillis, 0), -1);
     }
 
     void putinitclient(clientinfo *ci, packetbuf &p, bool allow)
@@ -5138,6 +5147,22 @@ namespace server
                 ci->weapammo[weap][W_A_STORE] = 0;
             }
         }
+    }
+
+    void climbevent::process(clientinfo *ci)
+    {
+        if(!G(csgopenmovement) || !ci->isalive(gamemillis) || ci->actortype >= A_ENEMY) return;
+        if(finish)
+        {
+            if(!ci->climbing) return;
+            ci->endclimb(millis);
+        }
+        else
+        {
+            if(ci->climbing || millis < ci->climbdrawuntil || ci->cookinghe() || ci->cookingsmoke()) return;
+            ci->beginclimb(millis);
+        }
+        sendf(-1, 1, "ri4x", N_SPHY, ci->clientnum, finish ? SPHY_CLIMBEND : SPHY_CLIMB, millis, ci->ownernum);
     }
 
     void switchevent::process(clientinfo *ci)
@@ -6706,6 +6731,16 @@ namespace server
                             }
 
                             break; // does not get sent to clients
+                        }
+                        case SPHY_CLIMB: case SPHY_CLIMBEND:
+                        {
+                            int stamp = getint(p);
+                            if(!proceed || !G(csgopenmovement) || cp->state != CS_ALIVE || cp->needsresume) break;
+                            climbevent *ev = new climbevent;
+                            ev->finish = idx == SPHY_CLIMBEND;
+                            ev->millis = cp->getmillis(gamemillis, stamp);
+                            cp->addevent(ev);
+                            break;
                         }
                         case SPHY_PRIZE:
                         {

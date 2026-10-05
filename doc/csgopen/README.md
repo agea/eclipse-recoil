@@ -68,6 +68,16 @@ place the binaries. Use the development script for this milestone.
 
 ## Local gameplay
 
+The TDM preset automatically steps over obstacles up to 7 world units without
+reducing horizontal speed. Walking into a higher ledge, up to 13 units, starts
+a 450 ms climb. The pistol stays available; other weapons are hidden during
+the climb and then take their normal draw time. Ground jumps use
+`impulsejump=1.1` instead of 1.5. Clearance and a supported landing are required.
+These settings apply across maps and are synchronized by the server; the
+original profile keeps automatic traversal disabled. The network protocol is
+now 283, so update clients and servers together. See [movement rules](gameplay.md#movimento)
+and [native checks](validation.md#automatic-obstacle-traversal-and-lower-jumps-2026-10-05).
+
 ### Quake 3 / Urban Terror map converter
 
 `scripts/csgopen/q3bsp.py` reads compiled Quake 3 `IBSP` version 46 data
@@ -136,13 +146,21 @@ scripts/csgopen/convert-source-bsp.sh /path/to/de_example.bsp /path/to/pak01_dir
 ```
 
 The default LOD reduces every displacement axis by four. Render geometry is
-kept below Eclipse Recoil's 65,535-index model limit; the converter stops with
-a clear error when non-displacement geometry still exceeds it. Collision is
-reconstructed from the BSP's authored solid and player-clip brushes, plus
+partitioned into models below Eclipse Recoil's 65,535-index limit, including
+the duplicated triangles required for isolated BIH meshes. Large maps such
+as Canals retain their world geometry and share textures across model parts.
+Collision is reconstructed from the BSP's authored solid and player-clip brushes, plus
 compiled displacement terrain. It is exported as double-sided OBJ carriers
 partitioned into 1,024-Source-unit XY tiles, so the engine indexes local BIH
 volumes for floors, stairs, walls and raised surfaces without altering the
-visible material meshes. Starts are
+visible material meshes. Only the brush face matching a displacement's footprint
+is replaced; unrelated floors and walls sharing its plane keep their collision.
+Version-21 brush sides decode `bevel` and `thin` as separate byte flags; thin
+sides retain their collision, including stair treads and landings. Imported maps
+also set `stairheight` to `20 * scale` (5 at scale 0.25): Source's 18-unit step
+height plus two Source units of clearance for mesh edges. This map setting
+lets players climb the tested bridge stairs without jumping.
+Starts are
 placed above their closest compiled walkable surface with native player
 clearance, while Source yaw is preserved in Eclipse coordinates. Generated
 maps disable the default `newmap` lower-half floor and rely only on imported
@@ -201,6 +219,12 @@ With a locally installed `data/csgopen/cs_agency.zip`, launch Agency in TDM:
 
 ```sh
 scripts/csgopen/dev.sh tdm cs_agency
+```
+
+With a locally installed `data/csgopen/de_canals.zip`, launch Canals in TDM:
+
+```sh
+scripts/csgopen/dev.sh tdm de_canals
 ```
 
 ### Valve VMF map converter

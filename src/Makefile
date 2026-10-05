@@ -360,6 +360,13 @@ CLIENT_OBJS = \
     game/weapons.o
 
 # Build tests
+ifeq (1,$(CSGOPEN_MOVEMENT_TEST))
+    ifeq ($(APPCLIENT),$(APPNAME))
+        $(error CSGOPEN_MOVEMENT_TEST requires a separate APPCLIENT path)
+    endif
+    CLIENT_OBJS := $(filter-out game/physics.o,$(CLIENT_OBJS)) tests/csgopenmovement.o
+    tests/csgopenmovement.o: game/physics.cpp game/game.h game/vars.h
+endif
 ifneq (,$(findstring -D_DEBUG,$(CXXFLAGS)))
     CLIENT_OBJS += tests/slotmanager.o
 endif

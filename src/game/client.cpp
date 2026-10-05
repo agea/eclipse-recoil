@@ -2219,6 +2219,18 @@ namespace client
             loopi(W_MAX) loopj(W_A_MAX) d->weapammo[i][j] = getint(p);
             loopi(W_MAX) d->weapent[i] = getint(p);
         }
+        int climbing = getint(p), climbelapsed = getint(p), drawremaining = getint(p);
+        if(!local || !resume || reset)
+        {
+            d->climbing = climbing != 0;
+            d->climbstart = lastmillis-max(climbelapsed, 0);
+            d->climbdrawuntil = drawremaining > 0 ? lastmillis+drawremaining : 0;
+            if(isweap(d->weapselect) && d->weapselect != W_PISTOL)
+            {
+                if(d->climbing) d->setweapstate(d->weapselect, W_S_WAIT, csgopenclimbtime, d->climbstart);
+                else if(drawremaining > 0) d->setweapstate(d->weapselect, W_S_SWITCH, drawremaining, lastmillis);
+            }
+        }
         if(resume) d->configure(lastmillis, game::gamemode, game::mutators, physics::hasaffinity(d));
         return reset;
     }
@@ -2451,6 +2463,14 @@ namespace client
                     bool proceed = t && ((SPHY_SERVER&(1<<st)) || (t != game::player1 && !t->ai));
                     switch(st)
                     {
+                        case SPHY_CLIMB: case SPHY_CLIMBEND:
+                        {
+                            getint(p); // server event timestamp; remote animation uses the local clock
+                            if(!proceed || !csgopenmovement) break;
+                            if(st == SPHY_CLIMB) t->beginclimb(lastmillis);
+                            else t->endclimb(lastmillis);
+                            break;
+                        }
                         case SPHY_JUMP:
                         {
                             if(!proceed) break;

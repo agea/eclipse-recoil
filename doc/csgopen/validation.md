@@ -1328,3 +1328,198 @@ prop collision remains approximate. Full route traversal, bot navigation,
 dynamic props and non-TDM entities remain manual checks or converter limits.
 The dedicated-server rotation was not changed; Agency can be selected
 explicitly with `scripts/csgopen/dev.sh server cs_agency`.
+
+## Canals Source BSP conversion (2026-10-05)
+
+The local CS:GO Legacy `de_canals.bsp` was converted and installed as the
+Git-ignored `data/csgopen/de_canals.zip`, using scale 0.25, displacement LOD 2,
+and a 300,000-triangle prop target. Three converter corrections were needed:
+
+- The world shell exceeded one model's 65,535-index limit even at maximum
+  displacement reduction. BIH-safe material groups are now packed into
+  separate render models, accounting for singleton duplication and sharing
+  textures. Canals emits two world models with 65,424 and 20,403 vertices.
+- Three materials used unquoted VMT base-texture paths. The resolver now
+  accepts both quoted and unquoted paths. The existing prop carriers were
+  retained and their four affected mesh skins rebound after re-extracting
+  the two spotlight textures; all world and prop materials now resolve.
+- Initial visual verification found Omega below the visible pavement despite
+  reporting floor physics. Collision reconstruction excluded every brush face
+  on any displacement plane, including distant coplanar floors. It now
+  excludes only matching displacement footprints. All 16 Omega starts then
+  resolve to the authored pavement at Source Z 96, rather than the lower
+  canal geometry. The native MPZ and ZIP were regenerated and verified again.
+
+Executed on macOS arm64:
+
+- All 431 playable prop models decoded without failure; 2,385/2,390 source
+  instances were retained, with five outside the playable envelope. Props
+  contain 325,416 triangles in 53 render tiles. The 1,990 solid instances
+  produce 51 collision tiles with 586,522 double-sided triangles. Prop
+  materials resolve 209/209.
+- World geometry contains 28,609 emitted render triangles, 577/577 resolved
+  materials, 69 collision tiles with 53,964 double-sided triangles, 35 native
+  water selections, and 32/32 supported starts. The editor emitted
+  `SOURCEIMPORT_DONE de_canals` and saved MPZ CRC `0x79ea8c61`.
+  Stage: `.csgopen/map-convert/de_canals-source.8rRDpF/`; logs:
+  `.csgopen/logs/convert-de_canals.log`, `sourceprops-de_canals.log`, and
+  `sourceimport-de_canals.log` in the same log directory.
+- ZIP integrity and namespace checks passed: 1,139 files, 284,623,728 bytes
+  compressed and 507,021,007 bytes uncompressed. An isolated client using
+  only the installed package root loaded TDM, spawned on Alpha and Omega,
+  and verified health, floor physics and camera height above the pavement.
+  It emitted **`CANALS_ZIP_DONE FAILURES 0`** and exited normally. Log:
+  `.csgopen/logs/de-canals-verify.log`; final screenshots:
+  `.csgopen/de-canals-verify/screenshots/de_canals-alpha.0001.png` and
+  `.csgopen/de-canals-verify/screenshots/de_canals-omega.0001.png`.
+- The full existing network smoke test passed **`SMOKE_DONE FAILURES 0`**
+  against Canals, including synchronized rules and inventory, a 2,983 ms
+  measured respawn interval, and the switch to Dutility. The isolated server
+  used loopback port 28973 with public registration, LAN discovery and HTTP
+  disabled; both processes stopped on completion. Logs:
+  `.csgopen/logs/de-canals-network-{server,client}.log`.
+- All 18 Source BSP unit tests and `git diff --check` passed. Regressions
+  cover model index limits, retained faces and texture paths, generated model
+  entity indices, unquoted VMT paths and distant coplanar collision floors.
+
+Visual inspection confirms textured Alpha waterfront and Omega courtyard
+spawn areas above the pavement. Lighting, transparency and simplified prop
+collision differ from Source. Full route traversal, water interaction and bot
+navigation remain manual checks; dynamic props, Source lighting and non-TDM
+entities remain converter limits. The server rotation was not changed. Launch
+the installed map with `scripts/csgopen/dev.sh tdm de_canals` or select it
+explicitly with `scripts/csgopen/dev.sh server de_canals`.
+
+## Imported Source stair traversal repair (2026-10-05)
+
+A reported jump requirement on the canal bridge near the Terrorist spawn was
+reproduced with the native player movement code. At Source Y 1904, the forward
+crossing stopped after 47.876 native units; at Y 1936, the reverse crossing
+stopped after 56.396 units. Other central lanes crossed successfully, explaining
+why the issue depended on the approach to the stairs.
+
+Two corrections are applied by the Source converter:
+
+- Version-21 brush sides store byte-sized `bevel` and `thin` flags separately.
+  Reading them as a single short wrongly excluded thin sides from collision.
+  The decoder now retains thin surfaces and preserves the version-20 short
+  layout. On the nearby waterside stair landing, supporting Source Z is now
+  96 instead of 24. Canals world collision grows from 53,964 to 130,270
+  double-sided triangles in the same 69 carriers.
+- Generated maps set `stairheight` to `20 * scale`, or 5 at scale 0.25. The
+  [Source SDK default](https://github.com/ValveSoftware/source-sdk-2013/blob/master/src/game/server/world.cpp)
+  is 18 Source units; two additional Source units provide clearance at the
+  imported mesh edges. Collision repair alone still blocked both bridge
+  approaches with the upstream 4.1-native-unit threshold. At 4.5 and 4.6 one
+  reverse approach still blocked, while 5 completed both. This is a saved
+  per-map variable; the engine default and TDM preset are unchanged.
+
+Executed checks:
+
+- A separate diagnostic client exercised `physics::moveplayer` with the normal
+  actor dimensions and TDM movement, without jump input. All ten 150-unit
+  crossings passed at Source Y 1888, 1904, 1920, 1936 and 1952, in both
+  directions, ending on floor physics. Maximum downward movement per sample
+  was 0.190 native units. Logs: `.csgopen/logs/stairprobe-bridge-before.log`,
+  `stairprobe-bridge-after.log`, `stairprobe-height.log`, and
+  `stairprobe-final.log`. The diagnostic command exists only in an ignored
+  test binary; its temporary source include was removed and the production
+  physics object rebuilt without it.
+- All six installed Source packages were regenerated using their existing prop
+  assets: Canals, Bank, Dust2, Lake, Safehouse and Agency. Native import markers,
+  ZIP integrity, namespace and the saved MPZ `stairheight` value were checked.
+  Original ZIPs are retained under `.csgopen/stair-repair/*-before.zip`.
+  Import logs: `.csgopen/logs/stair-repair-import-<map>.log`.
+- The production client loaded only the installed package root and verified
+  the saved stair height, health and supported Alpha/Omega spawns on all six
+  maps: **`MAP_REPAIR_DONE FAILURES 0`**. Log:
+  `.csgopen/logs/stair-repair-verify.log`.
+- The final Canals package has MPZ CRC `0x6e476584` and contains 1,139 files in
+  a 285,577,652-byte ZIP. The loopback multiplayer test passed the synchronized
+  stair-height check and **`SMOKE_DONE FAILURES 0`**, including inventory,
+  rules, a 2,991 ms respawn and the switch to Dutility. Logs:
+  `.csgopen/logs/de-canals-network-{server,client}.log`.
+- All 20 Source BSP unit tests and `git diff --check` passed. Regressions cover
+  retained thin-side support and compatibility with version-20 bevel flags;
+  the stage integration check also verifies the generated stair setting.
+
+The initial regenerated Canals multiplayer check caught the editor profile
+reusing its previously saved map configuration and therefore saving 4.1 again.
+Canals was rebuilt with a fresh editor profile and the MPZ value was checked
+before replacing the installed package. Prop collision remains approximate;
+full traversal of every stair in the other maps remains a manual check.
+
+
+## Automatic obstacle traversal and lower jumps (2026-10-05)
+
+The opt-in TDM movement rules now use a 7-unit fast step, a 13-unit maximum
+climb and a 450 ms automatic climb. Actor scale applies to both heights.
+Non-pistol weapons disappear during climbing and require their normal
+`delayswitch` afterwards; the pistol remains usable. Client and server share
+weapon restrictions, timed climb events and welcome/resume snapshots. Protocol
+283 requires matching updated clients and servers. Original movement remains
+behind `csgopenmovement=0`; map-specific stair settings are retained.
+
+Executed native checks:
+
+- Production client and dedicated server built on macOS arm64. A separate
+  opt-in client includes the production physics implementation and adds only
+  test commands: `src/tests/csgopenmovement.cpp`. The normal client does not
+  link these commands. Build with `CSGOPEN_MOVEMENT_TEST=1` and a separate
+  `APPCLIENT` path; the Makefile rejects the normal client path.
+- A synthetic collision-model fixture tested flat ground; a 7-unit step;
+  7.5- and 13-unit climbs; a 14-unit wall; insufficient headroom above low
+  and high obstacles; pistol climbing; a cooking HE grenade; and disabled
+  automatic movement. **`MOVEMENT_DONE FAILURES 0`** in
+  `.csgopen/logs/movement-fixture-verify.log`. The 100-unit walk took 1,940 ms
+  both on flat ground and across the 7-unit step. Minimum horizontal speed
+  at the step was 54.990 units/s, within 2% of the flat target. Each eligible
+  high obstacle produced exactly one completed climb. Tests checked weapon
+  visibility, shooting and switch restrictions during climbing, draw blocking
+  even with weapon-state skip flags, the exact weapon draw deadline and the
+  pistol exemption. A full weapon/spawn reset cleared traversal state.
+- With the same actor and native jump physics, changing `impulsejump` from
+  1.5 to 1.1 reduced the apex from 18.979 to 11.870 units and airtime from
+  825 to 680 ms. Jump remained higher than the fast-step threshold.
+- The installed Canals package passed ten 150-unit bridge crossings without
+  jump input or a climb: five lanes in both directions. All reached the target
+  distance. **`MOVEMENT_DONE FAILURES 0`** in
+  `.csgopen/logs/movement-canals.log`. Early tests caught a classification
+  regression at rounded tread edges: body clearance can be valid before the
+  contact normal is flat enough for a landing. Height classification now checks
+  nearby body clearance; the step/climb destination still checks support.
+- A real actor and an observer connected to a dedicated loopback server on
+  the synthetic map. The actor automatically climbed with an SMG; the observer
+  saw both the shared climbing flag and the subsequent draw deadline.
+  **`MOVEMENT_NETWORK_DONE FAILURES 0`** in
+  `.csgopen/logs/movement-network-observer.log`; no weapon sync error was found.
+- The canonical `config/csgopen/smoke.cfg` was rerun on the dedicated Canals
+  loopback server, with only its test port changed to 28973. It passed all
+  original checks plus synchronized traversal heights, climb duration and
+  lower jump strength: **`SMOKE_DONE FAILURES 0`**, including inventory,
+  2,995 ms respawn and map change to Dutility. The final production build
+  passed the same smoke check again with a 2,990 ms respawn. Logs:
+  `.csgopen/logs/de-canals-network-{server,client}.log`. Prior stair-only
+  network logs are preserved with a `-stairs-only` suffix.
+- All 20 Source converter unit tests and `git diff --check` passed.
+
+To reproduce the fixture on macOS, run these commands from the checkout root.
+The build and verification launches need access to the native display:
+
+```sh
+python3 scripts/csgopen/movement-fixture.py
+fixture_dir="$PWD/.csgopen/movement-fixture"
+src/eclipse-recoil_native "-h$fixture_dir/build" "-p$fixture_dir/data" -sm -ss0 -dw640 -dh480 -df0 '-xexec "build.cfg"'
+# Require MOVEMENT_FIXTURE_BUILT in the build profile log before copying.
+cp "$fixture_dir"/build/maps/csgopen_movement.* "$fixture_dir/data/maps/"
+movement_alprefix=$(HOMEBREW_NO_AUTO_UPDATE=1 brew --prefix openal-soft)
+PKG_CONFIG_PATH="$movement_alprefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" make -C src -j4 CSGOPEN_MOVEMENT_TEST=1 APPCLIENT=../.csgopen/csgopen-movement-test client
+.csgopen/csgopen-movement-test_native "-h$fixture_dir/verify" "-p$fixture_dir/data" -sm -ss0 -dw640 -dh480 -df0 '-xexec "verify.cfg"'
+```
+
+Require `MOVEMENT_DONE FAILURES 0` in the verification log. All generated
+assets and profiles stay under `.csgopen/`; no submodule map is edited.
+Keyboard/mouse feel, presentation of the climbing animation, narrow irregular
+props and exhaustive traversal on other maps remain manual checks. The test
+requires enough clearance for the full body and a supported landing; it does
+not authorize climbing through ceilings or onto other players.

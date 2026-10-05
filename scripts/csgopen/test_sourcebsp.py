@@ -6,6 +6,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import zlib
 from pathlib import Path
 
@@ -45,6 +46,29 @@ def empty_bsp(**overrides):
 
 
 class SourceBspTest(unittest.TestCase):
+    def test_version_21_thin_brush_side_keeps_its_walkable_face(self):
+        planes = [
+            sourcebsp.Plane((1.0, 0.0, 0.0), 1.0),
+            sourcebsp.Plane((-1.0, 0.0, 0.0), 1.0),
+            sourcebsp.Plane((0.0, 1.0, 0.0), 1.0),
+            sourcebsp.Plane((0.0, -1.0, 0.0), 1.0),
+            sourcebsp.Plane((0.0, 0.0, 1.0), 1.0),
+            sourcebsp.Plane((0.0, 0.0, -1.0), 1.0),
+        ]
+        data = b"".join(struct.pack("<HhhBB", index, 0, -1, 0, int(index == 4)) for index in range(6))
+        sides = sourcebsp._parse_brush_sides(data, 21)
+        self.assertFalse(sides[4].bevel)
+        self.assertTrue(sides[4].thin)
+        triangles = sourcebsp._brush_triangles(sourcebsp.Brush(0, 6, 1), sides, planes)
+        self.assertEqual(len(triangles), 12)
+        self.assertEqual(sourcebsp._support_floor((0.0, 0.0, 2.0), triangles), 1.0)
+        bevel = sourcebsp._parse_brush_sides(struct.pack("<HhhBB", 4, 0, -1, 1, 1), 21)[0]
+        self.assertTrue(bevel.bevel)
+
+    def test_version_20_brush_side_retains_short_bevel_format(self):
+        sides = sourcebsp._parse_brush_sides(struct.pack("<Hhhh", 7, 3, -1, 1), 20)
+        self.assertEqual(sides, [sourcebsp.BrushSide(7, 3, True, False)])
+
     def test_reads_version_10_static_props_with_default_scale(self):
         model = b"models/props/de_safehouse/chair.mdl"
         dictionary = model + b"\0" * (128 - len(model))
@@ -135,6 +159,58 @@ class SourceBspTest(unittest.TestCase):
         self.assertEqual(stats, {"vertices": 600, "triangles": 200})
         self.assertIn(b"v -0 0 -0\nv -0 0 -1\nv -1 0 -0\n", output.getvalue())
 
+    def test_large_world_preserves_faces_textures_and_model_entity_indices(self):
+        triangle = sourcebsp.Triangle(
+            "floor", ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)), ((0.0, 0.0),) * 3
+        )
+        panel = sourcebsp.Triangle("panel", triangle.points, triangle.uvs)
+        # The isolated panel must be duplicated for BIH safety, which pushes
+        # this world beyond one model even though its source count fits.
+        triangles = [triangle] * (sourcebsp.OBJ_INDEX_LIMIT // 3 - 1) + [panel]
+        bsp = empty_bsp()
+
+        def textures(_content, materials, directory, bindings):
+            for material, meshes in materials.items():
+                filename = material + ".dds"
+                (directory / filename).write_bytes(sourcebsp._solid_dxt1_dds(0x8410))
+                for mesh in meshes:
+                    bindings[mesh] = filename
+            return {"resolved": len(materials), "missing": 0, "unsupported_format": 0}
+
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(bsp, "playable_triangles", return_value=triangles), \
+                patch.object(bsp, "playable_collision_triangles", return_value=[triangle]), \
+                patch.object(sourcebsp, "_extract_materials", side_effect=textures):
+            stage = Path(temp)
+            conversion = sourcebsp.write_eclipse_stage(
+                Path("fixture.bsp"), bsp, stage,
+                prop_manifest={"models": ["csgopen/imported/fixture/props/tile_0_0_0"]},
+            )
+            self.assertEqual(len(conversion["render_models"]), 2)
+            faces = 0
+            for model in conversion["render_models"]:
+                directory = stage / "data" / model
+                lines = (directory / "fixture.obj").read_text().splitlines()
+                vertices = sum(line.startswith("v ") for line in lines)
+                self.assertLessEqual(vertices, sourcebsp.OBJ_INDEX_LIMIT)
+                faces += sum(line.startswith("f ") for line in lines)
+                for line in lines:
+                    if line.startswith("f "):
+                        self.assertTrue(all(1 <= int(ref.split("/")[0]) <= vertices for ref in line.split()[1:]))
+                for line in (directory / "obj.cfg").read_text().splitlines():
+                    if line.startswith("objskin "):
+                        self.assertTrue((directory / line.split('"')[3]).is_file())
+            self.assertEqual(faces, len(triangles) + 1)
+            self.assertEqual(conversion["render_mesh"]["vertices"], faces * 3)
+            self.assertEqual(conversion["textures"]["resolved"], 2)
+            config = (stage / "data/maps/fixture.cfg").read_text()
+            self.assertEqual(config.count('mapmodel "'), 4)
+            self.assertIn("stairheight 5\n", config)
+            self.assertEqual(conversion["stair_height"], 5)
+            commands = (stage / "profile/build-map.cfg").read_text()
+            for index in range(4):
+                self.assertEqual(commands.count(f"newent mapmodel {index} 0 0 0 100 100"), 1)
+
     def test_collision_partitions_follow_horizontal_centroids(self):
         def triangle(x, y):
             return sourcebsp.Triangle(
@@ -168,6 +244,18 @@ class SourceBspTest(unittest.TestCase):
             sourcebsp.Brush(0, 6, 1), sides, planes, {4}
         )
         self.assertEqual(len(without_top), 10)
+        top = [(-1.0, -1.0, 1.0), (-1.0, 1.0, 1.0), (1.0, -1.0, 1.0), (1.0, 1.0, 1.0)]
+        # A displacement elsewhere on the same plane must not remove this
+        # brush's floor; a matching footprint must remove only its flat cap.
+        remote = [(x + 10.0, y, z) for x, y, z in top]
+        preserved = sourcebsp._brush_triangles(
+            sourcebsp.Brush(0, 6, 1), sides, planes, skip_polygons={4: [remote]}
+        )
+        self.assertEqual(len(preserved), 12)
+        displaced = sourcebsp._brush_triangles(
+            sourcebsp.Brush(0, 6, 1), sides, planes, skip_polygons={4: [top]}
+        )
+        self.assertEqual(len(displaced), 10)
 
     def test_extracts_playable_water_brush_and_quantizes_selection(self):
         planes = [
@@ -273,6 +361,16 @@ class SourceBspTest(unittest.TestCase):
         self.assertEqual(struct.unpack_from("<II", dds, 12), (4, 4))
         self.assertEqual(dds[84:88], b"DXT1")
         self.assertEqual(dds[-8:], b"12345678")
+
+    def test_resolves_quoted_and_unquoted_source_base_texture_paths(self):
+        for value in ('"Concrete/HR_C/HR_CONC_D1"', 'Concrete\\HR_C\\HR_CONC_D1'):
+            with self.subTest(value=value), patch.object(sourcebsp.ContentStore, "read") as read:
+                read.return_value = f'LightmappedGeneric\n{{\n$basetexture {value}\n}}'.encode()
+                content = sourcebsp.ContentStore(b"", None)
+                self.assertEqual(
+                    sourcebsp._resolve_base_texture(content, "concrete/hr_c/hr_conc_d1", {}, set()),
+                    "concrete/hr_c/hr_conc_d1",
+                )
 
     def test_builds_neutral_dxt1_texture(self):
         dds = sourcebsp._solid_dxt1_dds(0x8410)

@@ -586,6 +586,10 @@ GSVAR(0, PRIV_MODERATOR, janitorvanities, "");
 
 GFVAR(IDF_GAMEMOD, 0, movespeed, FVAR_NONZERO, 1.0f, FVAR_MAX); // speed
 GFVAR(IDF_GAMEMOD, 0, moveaccelscale, FVAR_NONZERO, 1.0f, FVAR_MAX); // grounded velocity response while moving
+GVAR(IDF_GAMEMOD, 0, csgopenmovement, 0, 0, 1); // grounded step and automatic ledge climb
+GFVAR(IDF_GAMEMOD, 0, csgopenstepheight, 0, 7.0f, 32); // low obstacle clearance, in world units
+GFVAR(IDF_GAMEMOD, 0, csgopenclimbheight, 0, 13.0f, 32); // maximum automatic ledge height
+GVAR(IDF_GAMEMOD, 0, csgopenclimbtime, 100, 450, 2000); // traversal duration, before weapon draw
 GFVAR(IDF_GAMEMOD, 0, movebrakescale, FVAR_NONZERO, 1.0f, FVAR_MAX); // grounded velocity response without movement input
 GVAR(IDF_GAMEMOD, 0, csgopensmokeduration, 1000, 18000, 60000);
 GFVAR(IDF_GAMEMOD, 0, csgopensmokeradius, 8, 56, 128);

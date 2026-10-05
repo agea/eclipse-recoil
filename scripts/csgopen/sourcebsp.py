@@ -66,6 +66,8 @@ TRIANGLES_PER_MESH = 100
 COLLISION_TRIANGLES_PER_MESH = 1000
 COLLISION_TILE_SIZE = 1024.0
 OBJ_INDEX_LIMIT = 0xFFFF
+# Source uses 18-unit steps; allow two units for imported mesh edge clearance.
+SOURCE_STAIR_HEIGHT = 20.0
 
 
 class SourceBspError(ValueError):
@@ -122,6 +124,7 @@ class BrushSide:
     plane: int
     texinfo: int
     bevel: bool
+    thin: bool = False
 
 
 @dataclass(frozen=True)
@@ -336,10 +339,7 @@ class SourceBsp:
             for row in _records(chunk(L_PLANES), "<3ffi", "planes")
         ]
         brushes = [Brush(*row) for row in _records(chunk(L_BRUSHES), "<3i", "brushes")]
-        brushsides = [
-            BrushSide(row[0], row[1], bool(row[3]))
-            for row in _records(chunk(L_BRUSHSIDES), "<Hhhh", "brush sides")
-        ]
+        brushsides = _parse_brush_sides(chunk(L_BRUSHSIDES), version)
         nodes = list(_records(chunk(L_NODES), "<3i3h3hHHh2x", "nodes"))
         leaves = list(_records(chunk(L_LEAVES), "<ihh3h3h4Hh2x", "leaves"))
         leafbrushes = [row[0] for row in _records(chunk(L_LEAFBRUSHES), "<H", "leaf brushes")]
@@ -455,14 +455,16 @@ class SourceBsp:
             for face in self.faces[model.first_face : model.first_face + model.face_count]
             if face.dispinfo >= 0
         ]
-        displacement_planes = {face.plane for face in displacement_faces}
+        displacement_polygons: dict[int, list[list[tuple[float, float, float]]]] = defaultdict(list)
+        for face in displacement_faces:
+            displacement_polygons[face.plane].append(self._face_polygon(face))
         output = []
         for brush_index in self.model_brushes[0]:
             brush = self.brushes[brush_index]
             if not brush.contents & (CONTENTS_SOLID | CONTENTS_PLAYERCLIP):
                 continue
             for points in _brush_triangles(
-                brush, self.brushsides, self.planes, displacement_planes
+                brush, self.brushsides, self.planes, skip_polygons=displacement_polygons
             ):
                 center = tuple(sum(point[axis] for point in points) / 3.0 for axis in range(3))
                 if bounds and any(
@@ -513,11 +515,10 @@ class SourceBsp:
         """Return a slightly inset visual shell behind authored solid brushes."""
         bounds = self.playable_bounds()
         model = self.models[0]
-        displacement_planes = {
-            face.plane
-            for face in self.faces[model.first_face : model.first_face + model.face_count]
-            if face.dispinfo >= 0
-        }
+        displacement_polygons: dict[int, list[list[tuple[float, float, float]]]] = defaultdict(list)
+        for face in self.faces[model.first_face : model.first_face + model.face_count]:
+            if face.dispinfo >= 0:
+                displacement_polygons[face.plane].append(self._face_polygon(face))
         output = []
         for brush_index in self.model_brushes[0]:
             brush = self.brushes[brush_index]
@@ -526,7 +527,7 @@ class SourceBsp:
             if not (solid or player_clip):
                 continue
             for points in _brush_triangles(
-                brush, self.brushsides, self.planes, displacement_planes
+                brush, self.brushsides, self.planes, skip_polygons=displacement_polygons
             ):
                 center = tuple(sum(point[axis] for point in points) / 3.0 for axis in range(3))
                 if bounds and any(
@@ -680,16 +681,6 @@ def write_eclipse_stage(
     collision_source = bsp.playable_collision_triangles(displacement_lod)
     neutral_backing = bsp.neutral_backing_triangles() if include_neutral_backing else []
     water_volumes = bsp.playable_water_volumes()
-    # Eclipse combines all OBJ meshes into one ushort-indexed VBO.  Chunking
-    # protects each BIH mesh, but it cannot prevent a model-wide index wrap.
-    # This exporter deliberately duplicates render vertices, so the bound is
-    # exact and provides a clear request to increase displacement LOD.
-    render_vertex_count = len(triangles) * 3
-    if render_vertex_count > OBJ_INDEX_LIMIT:
-        raise SourceBspError(
-            f"simplified render mesh needs {render_vertex_count} OBJ vertices; "
-            f"Eclipse supports at most {OBJ_INDEX_LIMIT}, increase --displacement-lod"
-        )
     stem = source.stem
     model_rel = Path("csgopen") / "imported" / stem
     model_dir = stage / "data" / model_rel
@@ -698,23 +689,38 @@ def write_eclipse_stage(
     for directory in (model_dir, maps_dir, profile_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
-    mesh_bindings: dict[str, str] = {}
-    with (model_dir / f"{stem}.obj").open("wb") as output:
-        render_stats, material_meshes = _write_render_obj(output, triangles, bsp.source_name)
-
     vpk = VpkArchive(vpk_path) if vpk_path else None
     content = ContentStore(bsp.pakfile, vpk)
-    texture_stats = _extract_materials(content, material_meshes, model_dir, mesh_bindings)
-
-    model_config = [
-        f'objload "{stem}.obj"',
-        "mdlcullface 0",
-        f"mdlscale {scale * 100:.9g}",
-        "mdlcollide 0",
-    ]
-    for mesh, texture in sorted(mesh_bindings.items()):
-        model_config.insert(1, f'objskin "{mesh}" "{texture}"')
-    (model_dir / "obj.cfg").write_text("\n".join(model_config) + "\n", encoding="utf-8")
+    materials = {triangle.material for triangle in triangles}
+    texture_names: dict[str, str] = {}
+    texture_stats = _extract_materials(
+        content, {material: [material] for material in sorted(materials)}, model_dir, texture_names
+    )
+    render_models = []
+    render_stats = {"vertices": 0, "triangles": 0, "meshes": 0, "materials": len(materials)}
+    for index, part in enumerate(_render_partitions(triangles)):
+        relative = model_rel if index == 0 else model_rel / f"world_{index}"
+        directory = stage / "data" / relative
+        directory.mkdir(parents=True, exist_ok=True)
+        with (directory / f"{stem}.obj").open("wb") as output:
+            stats, material_meshes = _write_render_obj(output, part, bsp.source_name)
+        for key in ("vertices", "triangles", "meshes"):
+            render_stats[key] += stats[key]
+        model_config = [
+            f'objload "{stem}.obj"',
+            "mdlcullface 0",
+            f"mdlscale {scale * 100:.9g}",
+            "mdlcollide 0",
+        ]
+        for material, meshes in sorted(material_meshes.items()):
+            texture = texture_names.get(material)
+            if texture:
+                texture_path = texture if index == 0 else f"../{texture}"
+                for mesh in meshes:
+                    model_config.insert(1, f'objskin "{mesh}" "{texture_path}"')
+        (directory / "obj.cfg").write_text("\n".join(model_config) + "\n", encoding="utf-8")
+        render_models.append(relative)
+    render_stats["models"] = len(render_models)
     fallback_rel = None
     fallback_stats = {"vertices": 0, "triangles": 0, "meshes": 0, "materials": 0}
     if include_neutral_backing:
@@ -779,8 +785,9 @@ def write_eclipse_stage(
         f"// Generated directly from {bsp.source_name}",
         "setenv ambient 0x808080",
         "setenv skylight 0xFFFFFF",
-        f'mapmodel "{model_rel.as_posix()}"',
+        f"stairheight {SOURCE_STAIR_HEIGHT * scale:.9g}",
     ]
+    map_config.extend(f'mapmodel "{path.as_posix()}"' for path in render_models)
     map_config.extend(f'mapmodel "{path.as_posix()}"' for path in collision_models)
     prop_models = [str(path) for path in (prop_manifest or {}).get("models", [])]
     map_config.extend(f'mapmodel "{path}"' for path in prop_models)
@@ -820,12 +827,11 @@ def write_eclipse_stage(
             "        editmatbox water %d %d %d %d %d %d %d"
             % (*origin, *size, grid)
         )
-    _append_positioned_entity(commands, "newent mapmodel 0 0 0 0 100 100", offset)
-    for model_index in range(1, len(collision_models) + 1):
+    for model_index in range(len(render_models) + len(collision_models)):
         _append_positioned_entity(
             commands, f"newent mapmodel {model_index} 0 0 0 100 100", offset
         )
-    prop_model_start = 1 + len(collision_models)
+    prop_model_start = len(render_models) + len(collision_models)
     for model_index in range(prop_model_start, prop_model_start + len(prop_models)):
         _append_positioned_entity(
             commands, f"newent mapmodel {model_index} 0 0 0 100 100", offset
@@ -875,7 +881,9 @@ def write_eclipse_stage(
     conversion = {
         "map": stem,
         "model": model_rel.as_posix(),
+        "render_models": [path.as_posix() for path in render_models],
         "scale": scale,
+        "stair_height": SOURCE_STAIR_HEIGHT * scale,
         "world_scale": world_scale,
         "world_size": world_size,
         "offset": offset,
@@ -938,6 +946,24 @@ def _append_positioned_entity(
             "        entcancel",
         )
     )
+
+
+def _render_partitions(triangles: list[Triangle]) -> list[list[Triangle]]:
+    """Pack BIH-safe material groups into ushort-indexed render models."""
+    by_material: dict[str, list[Triangle]] = defaultdict(list)
+    for triangle in triangles:
+        by_material[triangle.material].append(triangle)
+    partitions: list[list[Triangle]] = [[]]
+    limit = OBJ_INDEX_LIMIT // 3
+    for _material, items in sorted(by_material.items()):
+        # Include the duplicated singleton in the budget before packing. Each
+        # material in a part then has at least two triangles, so OBJ writing
+        # cannot add vertices beyond the model's ushort index limit.
+        for chunk in _safe_chunks(items, TRIANGLES_PER_MESH):
+            if len(partitions[-1]) + len(chunk) > limit:
+                partitions.append([])
+            partitions[-1].extend(chunk)
+    return partitions
 
 
 def _write_render_obj(
@@ -1063,9 +1089,10 @@ def _resolve_base_texture(
         result = None
     else:
         text = re.sub(r"//[^\r\n]*", "", data.decode("utf-8", "replace"))
-        match = re.search(r'"?\$basetexture"?\s+"([^\"]+)"', text, re.I)
+        match = re.search(r'"?\$basetexture"?\s+(?:"([^\"]+)"|([^\s{}"]+))', text, re.I)
         if match:
-            result = match.group(1).replace("\\", "/").lower().removeprefix("materials/").removesuffix(".vtf")
+            base = match.group(1) or match.group(2)
+            result = base.replace("\\", "/").lower().removeprefix("materials/").removesuffix(".vtf")
         else:
             include = re.search(r'"?include"?\s+"([^\"]+)"', text, re.I)
             result = _resolve_base_texture(content, include.group(1), cache, active) if include else None
@@ -1231,6 +1258,7 @@ def _brush_triangles(
     brushsides: Sequence[BrushSide],
     planes: Sequence[Plane],
     skip_planes: set[int] | frozenset[int] = frozenset(),
+    skip_polygons: dict[int, list[list[tuple[float, float, float]]]] | None = None,
 ) -> list[tuple[tuple[float, float, float], ...]]:
     if brush.side_count < 4 or brush.first_side < 0:
         return []
@@ -1259,6 +1287,15 @@ def _brush_triangles(
             if abs(_dot(plane.normal, point) - plane.distance) < 0.1
         ]
         if len(face) < 3:
+            continue
+        # Plane indices are shared by distant coplanar faces. Remove only the
+        # brush face actually replaced by a displacement, preserving other
+        # floors and walls on that same plane elsewhere in the map.
+        if skip_polygons and any(
+            len(face) == len(polygon)
+            and all(any(_distance(point, corner) < 0.1 for corner in polygon) for point in face)
+            for polygon in skip_polygons.get(side.plane, [])
+        ):
             continue
         center = tuple(sum(point[axis] for point in face) / len(face) for axis in range(3))
         helper = (0.0, 0.0, 1.0) if abs(plane.normal[2]) < 0.9 else (0.0, 1.0, 0.0)
@@ -1295,6 +1332,20 @@ def _plane_intersection(first: Plane, second: Plane, third: Plane):
         / determinant
         for axis in range(3)
     )
+
+
+def _parse_brush_sides(data: bytes, version: int) -> list[BrushSide]:
+    if version == 21:
+        # CS:GO/Portal 2 store bevel and thin as separate bytes. A thin side
+        # remains collidable; combining the bytes falsely marks it as bevel.
+        return [
+            BrushSide(row[0], row[1], bool(row[3]), bool(row[4]))
+            for row in _records(data, "<HhhBB", "brush sides")
+        ]
+    return [
+        BrushSide(row[0], row[1], bool(row[3]))
+        for row in _records(data, "<Hhhh", "brush sides")
+    ]
 
 
 def _records(data: bytes, fmt: str, label: str) -> Iterable[tuple]:

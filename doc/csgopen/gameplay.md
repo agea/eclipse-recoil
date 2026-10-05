@@ -98,20 +98,51 @@ Dichiarazioni: `vars.h`, capacità actor in `player.h`; usi in
 | `movestrafe` | 1.1 → 1 | fattore strafe, stessi limiti |
 | `moveaccelscale` (nuovo C++) | 1 → 0.75 | moltiplicatore del tasso di risposta a terra; FVAR_NONZERO..FVAR_MAX |
 | `movebrakescale` (nuovo C++) | 1 → 1.25 | moltiplicatore del tasso di risposta senza input; stessi limiti; ridotto da 1.5 dopo il primo test manuale |
+| `csgopenmovement` | 0 → 1 | abilita il superamento automatico degli ostacoli; booleano |
+| `csgopenstepheight` | 7 → 7 | altezza rapida, poco sopra il ginocchio; 0..32 unità mondo |
+| `csgopenclimbheight` | 13 → 13 | altezza massima dell’arrampicata, poco sopra la cintura; 0..32 unità mondo |
+| `csgopenclimbtime` | 450 → 450 | durata della salita; 100..2000 millisecondi |
+| `movestepup`, `movestepdown` | 0.95, 1.15 → 1, 1 | nessun modificatore di velocità sui gradini |
+| `impulsejump` | 1.5 → 1.1 | moltiplicatore del salto a terra |
 
 `canimpulse` controlla la maschera prima dei costi/timer. Il normale salto a
 terra richiede proprio IM_T_JUMP: azzerare l'intero sistema lo romperebbe.
 Boost (incluso salto extra in aria), dash, slide, launch, melee impulse, kick
 (walljump), grab, wallrun, vault e pound non sono consentiti. I bind restano
 intatti. Resta la tolleranza originale di 125 ms quando si lascia il terreno;
-non è un salto aggiuntivo dopo il primo. Salto e crouch non sono riscalati:
-`impulsespeed=75`, `impulsejump=1.5`, `movecrawl=0.6` upstream.
+non è un salto aggiuntivo dopo il primo. Il salto usa `impulsejump=1.1`;
+`impulsespeed=75` e `movecrawl=0.6` restano upstream.
 
 `movevelocity` calcola velocità in unità mondo/secondo, non unità Source:
 `actor.speed * movescale * movespeed`, più modificatori di posizione/armi.
 `playerspeed=100`, SMG portato `modspeed=-5`: normalmente circa 52.25 unità/s
 nel preset prima di altri modificatori. Restano riduzioni mentre si spara,
-in aria (0.75), step-up/down, acqua, gravità e inerzia originali.
+in aria (0.75), acqua, gravità e inerzia originali.
+
+Camminando contro un ostacolo si supera automaticamente la soglia bassa senza
+perdere velocità orizzontale. Tra 7 e 13 unità si attiva una salita di 450 ms:
+il giocatore alza il corpo, poi avanza sul bordo. Le soglie seguono la scala
+dell’attore. La collisione del corpo deve trovare appoggio e spazio libero lungo
+il percorso, anche sulle superfici importate invisibili: soffitti bassi e bordi
+non raggiungibili restano bloccanti. La salita richiede appoggio a terra;
+acqua, scale a pioli, piattaforme mobili e attori enemy conservano il movimento
+ordinario. Le rampe e i gradini ravvicinati usano la soglia per ciascun bordo.
+
+Durante l’arrampicata l’arma sparisce, salvo la pistola che resta visibile e
+utilizzabile. Le altre armi non possono sparare o ricaricare. Cambio, raccolta e
+rilascio di armi sono bloccati fino alla fine della salita e dell’estrazione:
+non si può usare uno switch per aggirare il ritardo. Una volta saliti, l’arma
+selezionata viene estratta con il proprio `delayswitch`. Con la pistola non si
+applica un nuovo ritardo. Una granata già in cook e una ricarica in corso di
+un’arma diversa dalla pistola impediscono l’inizio della salita. Morte/respawn
+azzerano lo stato. Client e server sincronizzano salita, fine ed estrazione,
+compresi gli snapshot per chi entra nella partita. Il protocollo è 283:
+client e server devono essere aggiornati insieme.
+
+Queste regole sono attivate dal preset TDM; `csgopenmovement=0` mantiene il
+percorso di movimento originale. Il confronto nativo sul terreno piano con
+un attore TDM misura l’apice del salto da 18.979 a 11.870 unità e il tempo in
+aria da 825 a 680 ms; la sensazione con tastiera e mouse resta da valutare.
 `gamespeed=100` è invariato.
 
 La risposta originale usa lo stesso `floorcoast` per accelerazione e frenata:
