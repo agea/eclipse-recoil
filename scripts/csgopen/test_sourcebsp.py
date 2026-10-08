@@ -46,6 +46,59 @@ def empty_bsp(**overrides):
 
 
 class SourceBspTest(unittest.TestCase):
+    def brush_surfaces(self, boxes):
+        planes, sides, brushes = [], [], []
+        for low, high, contents in boxes:
+            first = len(sides)
+            for axis in range(3):
+                for sign, distance in ((1, high[axis]), (-1, -low[axis])):
+                    normal = tuple(sign if i == axis else 0 for i in range(3))
+                    sides.append(sourcebsp.BrushSide(len(planes), 0, False))
+                    planes.append(sourcebsp.Plane(normal, distance))
+            brushes.append(sourcebsp.Brush(first, 6, contents))
+        return sourcebsp._exposed_brush_triangles(brushes, sides, planes)
+
+    def test_adjacent_solid_and_playerclip_remove_only_shared_internal_faces(self):
+        triangles = self.brush_surfaces([
+            ((0, 0, 0), (32, 32, 32), sourcebsp.CONTENTS_SOLID),
+            ((32, 0, 0), (64, 32, 32), sourcebsp.CONTENTS_PLAYERCLIP),
+        ])
+        self.assertEqual(len(triangles), 20)
+        self.assertFalse(any(all(p[0] == 32 for p in triangle) for triangle in triangles))
+
+    def test_contained_brush_does_not_leave_internal_collision_walls(self):
+        triangles = self.brush_surfaces([
+            ((0, 0, 0), (32, 32, 32), sourcebsp.CONTENTS_PLAYERCLIP),
+            ((8, 8, 8), (24, 24, 24), sourcebsp.CONTENTS_SOLID),
+        ])
+        self.assertEqual(len(triangles), 12)
+        self.assertTrue(all(any(p[axis] in (0, 32) for axis in range(3)) for triangle in triangles for p in triangle))
+
+    def test_coincident_exterior_faces_and_player_passages_are_preserved(self):
+        box = ((0, 0, 0), (32, 32, 32), sourcebsp.CONTENTS_SOLID)
+        self.assertEqual(len(self.brush_surfaces([box, box])), 24)
+        triangles = self.brush_surfaces([box, ((160, 0, 0), (192, 32, 32), sourcebsp.CONTENTS_PLAYERCLIP)])
+        self.assertEqual(len(triangles), 24)
+        for x in (32, 160):
+            self.assertTrue(any(all(p[0] == x for p in triangle) for triangle in triangles))
+
+    def test_only_small_nonsolid_playerclip_ramps_become_walk_surfaces(self):
+        planes = [sourcebsp.Plane((1, 0, 0), 32), sourcebsp.Plane((-1, 0, 0), 0),
+                  sourcebsp.Plane((0, 1, 0), 32), sourcebsp.Plane((0, -1, 0), 0),
+                  sourcebsp.Plane((0, 0, -1), 0),
+                  sourcebsp.Plane((2**-0.5, 0, 2**-0.5), 32*2**-0.5)]
+        sides = [sourcebsp.BrushSide(i, 0, False) for i in range(6)]
+        clip = sourcebsp.Brush(0, 6, sourcebsp.CONTENTS_PLAYERCLIP)
+        triangles = sourcebsp._exposed_brush_triangles([clip], sides, planes)
+        self.assertEqual(sourcebsp._support_floor((16, 16, 24), triangles), 16)
+        self.assertTrue(all(all(abs(p[0]+p[2]-32) < 1e-5 for p in t) for t in triangles))
+        solid = sourcebsp.Brush(0, 6, sourcebsp.CONTENTS_SOLID | sourcebsp.CONTENTS_PLAYERCLIP)
+        self.assertEqual(sourcebsp._exposed_brush_triangles([solid], sides, planes),
+                         sourcebsp._brush_triangles(solid, sides, planes))
+        wide = [sourcebsp.Plane(p.normal, 512 if i == 2 else p.distance) for i, p in enumerate(planes)]
+        self.assertEqual(sourcebsp._exposed_brush_triangles([clip], sides, wide),
+                         sourcebsp._brush_triangles(clip, sides, wide))
+
     def test_version_21_thin_brush_side_keeps_its_walkable_face(self):
         planes = [
             sourcebsp.Plane((1.0, 0.0, 0.0), 1.0),
@@ -256,6 +309,21 @@ class SourceBspTest(unittest.TestCase):
             sourcebsp.Brush(0, 6, 1), sides, planes, skip_polygons={4: [top]}
         )
         self.assertEqual(len(displaced), 10)
+
+    def test_ladder_brushes_become_contact_volumes_without_solid_mesh(self):
+        planes = [sourcebsp.Plane(n, d) for n, d in [
+            ((1, 0, 0), 20), ((-1, 0, 0), 0),
+            ((0, 1, 0), 40), ((0, -1, 0), 0),
+            ((0, 0, 1), 160), ((0, 0, -1), 0)]]
+        bsp = empty_bsp(planes=planes,
+            brushes=[sourcebsp.Brush(0, 6, sourcebsp.CONTENTS_LADDER)],
+            brushsides=[sourcebsp.BrushSide(i, 0, False) for i in range(6)],
+            model_brushes=[(0,)])
+        self.assertEqual(bsp.playable_ladder_volumes(),
+            [sourcebsp.MaterialVolume((-16, -16, 0), (36, 56, 200))])
+        self.assertEqual(bsp.playable_collision_triangles(), [])
+        bsp.brushes = [sourcebsp.Brush(0, 6, sourcebsp.CONTENTS_WATER)]
+        self.assertEqual(bsp.playable_ladder_volumes(), [])
 
     def test_extracts_playable_water_brush_and_quantizes_selection(self):
         planes = [

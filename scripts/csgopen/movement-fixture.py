@@ -36,6 +36,24 @@ def stage():
         if index in (5, 8):
             box(155, 245, y-15, y+15, 512+height+19, 512+height+23)
 
+    # Tiny triangle seams, a taller barrier, and insufficient head clearance.
+    for index, height in enumerate((0.75, 2.0, 0.75)):
+        y = 940+30*index
+        box(160, 240, y-12, y+12, 512, 512+height)
+        if index == 2:
+            box(160, 245, y-12, y+12, 532.8, 536)
+
+    # Source-height steps with closely spaced treads, in both directions.
+    for index in range(3):
+        y = 500+30*index
+        for step in range(8):
+            box(160+6*step, 166+6*step, y-12, y+12, 512, 512+4.5*(step+1))
+        box(208, 280, y-12, y+12, 512, 548)
+        if index == 1:
+            box(175, 205, y-12, y+12, 540, 544)
+        if index == 2:
+            box(190, 202, y-12, y+12, 512, 564)
+
     # Connected terrain facets, including walkable slopes steeper than floorz.
     # The production maps are untouched; these meshes only exercise physics.
     for index, heights in enumerate(((0, 6, 20, 40, 58, 58, 58),
@@ -100,7 +118,7 @@ sleep 45000 [echo MOVEMENT_FIXTURE_TIMEOUT; quit]
     (BASE / 'verify/verify.cfg').write_text('''name "Movement fixture"
 showloadoutmenu 0
 tdm csgopen_movement
-sleep 10000 [loop i 10 [movementcase $i]; loop i 2 [movementslope $i 1; movementslope $i -1]; movementslope 2 1; movementslope 3 1; movementjump; movementdone; sleep 1000 [quit]]
+sleep 10000 [loop i 10 [movementcase $i]; loop i 2 [movementslope $i 1; movementslope $i -1]; movementslope 2 1; movementslope 3 1; loop i 3 [movementseam $i]; movementstairs 0 1; movementstairs 0 -1; movementstairs 1 1; movementstairs 2 1; movementjump; movementdone; sleep 1000 [quit]]
 sleep 60000 [echo MOVEMENT_TIMEOUT; quit]
 ''')
     (BASE / 'verify/bench.cfg').write_text('''name "Slope benchmark"

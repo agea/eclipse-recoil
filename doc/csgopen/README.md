@@ -90,6 +90,16 @@ avoids treating a slope transition as a new ledge. Walls, low ceilings and
 unsupported moves still block traversal. The change leaves terrain meshes,
 displacement LOD and triangle counts unchanged; map ZIPs need no regeneration.
 
+The Source converter also smooths solid props whose cavities cannot contain a
+player passage: props below 10 map units in height, or narrower than 8 units in
+both horizontal dimensions. It evaluates each instance's scale and rotation and preserves
+door/window frames and architectural passage props. The convex collision is
+used only when it reduces triangle count; rendered geometry stays separate.
+Grounded TDM movement additionally checks this frame's supported destination
+across seams within the map stair height, without requiring the farther climb
+probe to find a tread. It also tries the slope tangent when entering a walkable
+bevel from a flat tread. The swept body path and the normal walkable-slope limit still apply.
+
 ### Quake 3 / Urban Terror map converter
 
 `scripts/csgopen/q3bsp.py` reads compiled Quake 3 `IBSP` version 46 data
@@ -162,7 +172,37 @@ partitioned into models below Eclipse Recoil's 65,535-index limit, including
 the duplicated triangles required for isolated BIH meshes. Large maps such
 as Canals retain their world geometry and share textures across model parts.
 Collision is reconstructed from the BSP's authored solid and player-clip brushes, plus
-compiled displacement terrain. It is exported as double-sided OBJ carriers
+compiled displacement terrain. Brush faces wholly enclosed by another solid or
+player-clip brush are removed, including shared interior faces. This never splits
+faces or adds triangles. Small non-solid player-clip ramps (at most 256 Source
+units per axis, with an authored walkable incline) export their walking surfaces
+without vertical foundation sides. Solid brushes and vertical player-clip barriers
+keep their exterior walls. The curved Dust2 B stair prop has a separate reviewed
+continuous collision surface; its 87 triangles replace 159 without changing render
+geometry or other stair models.
+
+The two opened leaves of Dust2's Long A door model use separate convex collision
+surfaces derived from the full source mesh. The opening, frame and instance
+transforms are retained; both leaves are never enclosed in one hull. The candidate
+is used only within the existing collision triangle budget. Other door models
+keep their existing geometry.
+
+The reviewed `step_64x32` and `topstep_16x8` Vertigo modules used by Agency's
+exterior access have continuous collision prisms: an incline for each flight
+and a flat upper connector. The exported decorative edges remain visible, but
+cannot catch the player's feet. The model-specific rule checks nominal bounds
+and the triangle budget and keeps every instance transform. It is applied before
+general prop smoothing, which must not replace the reviewed surface.
+
+Low, regular rectangular stair props reuse the BSP walking surface when it
+covers every sampled tread point within -1 to +8 Source units of the visual
+surface. Coverage is checked after each instance transform; uncovered stairs
+retain their prop collision. Curved, tapered and architectural stair models are
+excluded. This removes redundant collision without generating triangles. On
+Dust2 it removes the duplicated collider at the B tunnel entrance while retaining
+the other three instances of the same stair model.
+
+World collision is exported as double-sided OBJ carriers
 partitioned into 1,024-Source-unit XY tiles, so the engine indexes local BIH
 volumes for floors, stairs, walls and raised surfaces without altering the
 visible material meshes. Only the brush face matching a displacement's footprint
@@ -204,13 +244,22 @@ cubemaps, Source shader effects, navigation data and non-spawn gameplay
 entities are not converted. Static props marked solid by Source receive
 invisible triangle-collision carriers built from their reduced render geometry.
 Logs, fallen trees and construction/timber piles instead use a closed convex
-hull built from the undecimated model, independently of the visible mesh. This
+hull built from the undecimated model, independently of the visible mesh. Bundled
+construction boards (including `construction_wood_2x4_` props) use a 12-triangle
+box in model space to remove small bevels and slots while preserving rotation
+and outer bounds. This
 fills small gaps and concave pockets that can trap a walking player. Selection
 uses explicit model-name prefixes; stairs, fences, standing trees, furniture
 and architectural props retain their existing collision to preserve openings.
 The hull follows the same instance rotation and scale as the visible prop;
 it can bridge visible recesses in a pile. Existing map ZIPs must be regenerated
 to apply the change. Prop manifests record the affected models and instances.
+The curved `de_inferno/bench_wood` model uses separate flat boxes for the seat,
+back and each lower support. Seat and back meet without a slot; the space
+between the lower supports remains open. This removes small collision edges
+when stepping down from a wall onto the bench. Render geometry stays unchanged,
+and the replacement is used only when it fits the existing collision triangle
+budget. Prop manifests record `sectioned_collision_props` and their models.
 These carriers also participate in bot line-of-sight ray tests. The converter
 does not yet import the original PHY hulls, so collision is approximate, while
 decorative non-solid props remain passable. Consequently a map can retain its
@@ -546,6 +595,19 @@ For another port, use `CSGOPEN_PORT=28811 scripts/csgopen/dev.sh server` and
 the same port in `connect`. Stop the server with Ctrl-C. Run only one instance
 per profile; do not launch two Eclipse Recoil clients sharing the same profile.
 
+### LAN server
+
+Run `scripts/csgopen/server-lan.sh` to start the native dedicated server with
+the same TDM preset and `config/csgopen/server-maps.cfg`. The separate
+`.csgopen/server-lan/` profile listens on all IPv4 interfaces: UDP 28801 for
+gameplay, UDP 28802 for information, UDP 28799 for LAN discovery, and TCP
+28888 for map packages. Public master registration remains disabled.
+The launcher writes its configuration on each run; stop it with Ctrl-C.
+
+After starting the TDM client, run `/serverlanport 28799` and `/searchlan 1`
+in its console, then refresh the server browser. Allow incoming connections
+to the server if the macOS firewall asks. Clients must share the LAN.
+
 ### Rotation, voting, and automatic map packages
 
 `scripts/csgopen/dev.sh server` reads `config/csgopen/server-maps.cfg` without
@@ -683,3 +745,19 @@ arena defaults of 1000 health, speed 1, and the full set of impulse capabilities
 
 No automatic commits or pushes. Linux and Windows retain their existing build
 branches, but have not been compiled on this Mac.
+
+
+### Source ladders and window clearance
+
+The converter exports authored ladder brushes as ladder material volumes with
+fine one-unit placement, without adding render or collision triangles. The TDM
+motor climbs them by holding forward and handles the roof transition. Reviewed
+House window frames use four simple collision volumes around their openings,
+within the original triangle budget. Player and bot scale is 0.8 in the TDM
+preset, with a lower crouch silhouette; effective step/climb heights stay at
+7/13 world units. The original gameplay profile keeps its dimensions and ladder
+controls. See the Safehouse checks in [validation](validation.md).
+
+The TDM first-person view displays weapon/arms without the separate body model,
+so leg animations cannot obstruct the view on stairs. This is a client display
+preference; it does not change traversal or require regenerating map packages.

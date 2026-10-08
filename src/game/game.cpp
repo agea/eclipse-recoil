@@ -1472,7 +1472,7 @@ namespace game
             {
                 bool sliding = d->impulsetimer(IM_T_SLIDE) != 0, crouching = sliding || (d->action[AC_CROUCH] && A(d->actortype, abilities)&(1<<A_A_CROUCH)),
                     moving = d->move || d->strafe || (d->physstate < PHYS_SLOPE && !physics::laddercheck(d)), ishi = moving && !sliding;
-                float zradlo = d->zradius*CROUCHLOW, zradhi = d->zradius*CROUCHHIGH, zrad = ishi ? zradhi : zradlo;
+                float zradlo = d->zradius*(csgopenmovement ? 0.48f : CROUCHLOW), zradhi = d->zradius*CROUCHHIGH, zrad = ishi ? zradhi : zradlo;
                 vec old = d->o;
 
                 if(A(d->actortype, abilities)&(1<<A_A_CROUCH) && (!crouching || ishi))

@@ -1704,3 +1704,667 @@ The generated `verify/verify.cfg` now includes slope regressions;
 Mouse/keyboard feel across all Lake paths and scene-level FPS remain manual
 checks. Authored clip barriers and genuinely steep/non-walkable terrain
 remain intentionally blocking.
+
+## Bundled construction wood collision (2026-10-05)
+
+A follow-up report identified a snag while climbing onto a timber pile near
+Lake's spawn. Inspection found that `construction_wood_2x4_` models were not
+covered by the continuous collision selection. These bundles and
+`construction_stack_` props now use a closed model-space bounding box (12
+triangles per instance), removing individual board slots and bevels without
+changing render geometry, instance rotation, or scale. Architecture remains
+excluded. Bounds can fill visible recesses; this is intentional for these piles.
+
+Executed checks:
+
+- Blender collision tests: 2 passed, including category selection, closed hull,
+  retained bounds, twelve-triangle box, and transformed coordinates.
+- Source BSP converter unit tests: 20 passed.
+- Lake regenerated successfully (`SOURCEIMPORT_DONE de_lake`), 427 props and
+  125 models decoded with no failures. Continuous collision covers 20 instances
+  instead of 4. Prop collision triangles decrease from 452,806 to 435,742;
+  render triangles remain 299,938 and all 179 render prop files are byte-identical.
+- Native movement checks start atop the spawn-side wood bundle and stacked
+  plywood, then walk in both X directions without jumping or climbing:
+  `MOVEMENT_DONE FAILURES 0`. This verifies four escape routes, rather than
+  reproducing the user's exact approach or every possible contact direction.
+- Local dedicated-server smoke: `SMOKE_DONE FAILURES 0`; server stopped.
+- Regenerated ZIP passed CRC validation and replaced local
+  `data/csgopen/de_lake.zip`. A backup and reports are in
+  `.csgopen/timber-repair/`. ZIP size decreases from 47,712,848 to 47,083,014 bytes.
+
+Manual verification of the reported approach onto the pile remains pending.
+Other converted maps need regeneration to receive this converter rule.
+
+## Lake wall-to-bench movement (2026-10-06)
+
+The reported route was reproduced from the low wall toward the two curved
+wooden benches near the other spawn. On the previous package, the centre route
+at X=1457.35, Y=534.3125, feet Z=2219.1 stopped after 5.096 of 18 requested
+units without climbing. The neighbouring route lanes remained passable.
+
+The converter now gives `models/props/de_inferno/bench_wood.mdl` a composite
+collision: flat seat and back boxes with no slot at their joint, plus separate
+lower support boxes. The space between supports stays open. The policy applies
+to every instance of that model on converted maps; architecture and other bench
+models retain their existing policy. Candidates exceeding the current reduced
+mesh triangle budget fall back to the existing collision. This intentionally
+bridges visible slat gaps and fills small recesses in the support profiles.
+
+The CSGOpen movement solver also retains the native bounded step fallback on
+flat support when a traverse probe rejects a shared edge. Climbing is still
+attempted first; the fallback uses the existing map stair height. The original
+profile follows the same code path as before.
+
+Executed checks:
+
+- Blender collision tests: 6 passed, including closed volumes, retained gaps,
+  flat support treads, narrow upper profiles, the complete 60-triangle composite
+  bench, and unchanged instance transforms.
+- Source BSP tests: 20 passed. `scripts/csgopen/dev.sh check` and `build` passed.
+- Native Lake integration: 20 routes passed (`MOVEMENT_DONE FAILURES 0`): six
+  wall-to-bench lanes, six reverse lanes, four lateral wall routes and four
+  timber-pile escape routes. Logs are in `.csgopen/timber-repair/complete-floor.log`.
+- Existing movement fixture passed (`MOVEMENT_DONE FAILURES 0`), including ten
+  obstacle/climb cases, both directions on open slopes, wall/ceiling barriers,
+  utility cooking restrictions, jumping and the original movement profile.
+  Log: `.csgopen/timber-repair/bench-movement-fixture.log`.
+- All 179 visible prop files remain byte-identical; render triangles remain
+  299,938. Prop collision triangles decrease from 435,742 to 430,430; collision
+  tile count remains 35. Four bench instances receive the new profile.
+- The generated ZIP passed CRC checks and was installed locally at
+  `data/csgopen/de_lake.zip`. Size decreases from 47,083,014 to 46,988,674 bytes;
+  SHA-256 is `5a679db3428fe1e2d9cc7a66dbad5a78a5ad9962c8edf57a086ae2ce816e72b1`.
+  Backup and report: `.csgopen/timber-repair/de_lake-before-benches.zip` and
+  `bench-report-final.json` in the same directory.
+
+The first resumed route runs lacked the map PNG, leaving the match waiting for
+map transfer. Their zero-progress results are invalid; the complete package was
+retested after the match started. Manual mouse/keyboard verification and a
+scene-level FPS benchmark remain pending. The remaining converted packages were
+regenerated in the subsequent all-map run recorded below.
+
+The rebuilt production client passed the dedicated loopback smoke test with
+`SMOKE_DONE FAILURES 0` in `.csgopen/timber-repair/bench-smoke-final.log`.
+The isolated server on port 28811 was stopped afterwards.
+
+## Regeneration of all installed Source maps (2026-10-06)
+
+All eight installed packages were regenerated from the local CS:GO legacy BSPs
+and VPK with the current converter: `ar_baggage`, `cs_agency`, `de_bank`,
+`de_canals`, `de_dust2`, `de_lake`, `de_safehouse`, and `de_stmarc`.
+Scale 0.25, displacement LOD 2, and the existing 300,000 prop simplification
+budget were retained. Structural preservation can keep the resulting prop count
+above that budget, as before. Each package passed the native
+`SOURCEIMPORT_DONE` marker, zero failed prop decodes, ZIP CRC validation, expected
+namespace validation, and MPZ/CFG/PNG presence checks before installation.
+
+Actual OBJ face counts, rather than rounded converter metadata, were compared
+against the backed-up packages:
+
+| Map | Visible prop triangles | Prop collision before | Prop collision after | World collision triangles |
+| --- | ---: | ---: | ---: | ---: |
+| ar_baggage | 300,211 | 446,348 | 446,348 | 57,604 |
+| cs_agency | 305,760 | 393,864 | 393,864 | 42,184 |
+| de_bank | 303,003 | 400,064 | 400,064 | 22,842 |
+| de_canals | 325,416 | 586,522 | 586,522 | 130,270 |
+| de_dust2 | 352,700 | 366,836 | 366,836 | 80,578 |
+| de_lake | 299,938 | 430,430 | 430,430 | 29,290 |
+| de_safehouse | 299,722 | 488,178 | 485,142 | 30,340 |
+| de_stmarc | 307,378 | 316,216 | 312,846 | 31,142 |
+
+Visible prop and world collision triangle counts remain unchanged on every map.
+Safehouse and St. Marc have 3,036 and 3,370 fewer prop collision triangles.
+Lake already contained the corrected timber and bench collision package.
+All prop texture files remain byte-identical. Dust2 has 15 regenerated prop OBJ
+files with small decimation differences at the same triangle count. Canals has
+two OBJ configuration changes that move the same spotlight material bindings
+after `objload`. Other visible prop files remain byte-identical.
+
+The eight ZIPs total 724,929,013 bytes, down from 729,728,896 bytes. Previous
+packages are retained in `.csgopen/regenerate-all-20261006/backups/`;
+`results.json` records conversion and package hashes, and `audit.json` records
+actual face counts and changed visible files. St. Marc remains excluded from
+the small-group rotation; regeneration does not establish that its separate
+conversion issues are repaired. Full manual route coverage and scene-level FPS
+measurements across all eight maps remain pending.
+
+The installed-package client run in `verify-final.log` loaded all eight maps.
+The seven maps permitted in the rotation passed all seven checks each: map
+stair height, Alpha team/health/floor support, and Omega team/alive/floor support.
+St. Marc passed loading and player state checks but failed floor support at both
+sampled team spawns (`REGEN_MAP_DONE FAILURES 2`). The backed-up St. Marc package
+reproduced both failures in `baseline-stmarc.log` (`BASELINE_MAP_DONE FAILURES 2`),
+confirming the spawn issue predates this regeneration. These checks cover spawn
+support, not full movement routes. `native-checks.json` contains the per-map
+results. The initial verification script used `(gamestate)` instead of
+`$gamestate` and never reached its assertions; it was corrected and restarted
+before the recorded final run.
+
+The production client also passed the dedicated loopback multiplayer test with
+`SMOKE_DONE FAILURES 0` in `.csgopen/regenerate-all-20261006/smoke-final.log`,
+including rules, inventory, respawn, and map change checks. The isolated server
+on port 28811 was stopped afterwards. `git diff --check` passed.
+
+## General compact-prop smoothing and bounded seam recovery (2026-10-06)
+
+The converter now applies a geometric rule beyond the named timber and bench
+families. Solid props below 10 map units in height, or narrower than 8 units in
+both horizontal dimensions, can use a convex collision envelope. Instance
+scale and rotated bounds are checked. Door/window frames and architectural
+passage families are excluded, and larger props that could contain crouched
+passages retain their existing collision. A hull replaces the original only
+when it has fewer triangles. Render geometry, world brushes, terrain LOD,
+player size and authored playerclip are unchanged.
+
+The TDM engine also tests the immediate horizontal destination across a small
+seam when the farther tread probe fails. Rise is bounded to one actor-scaled
+map unit and capped by both step settings. The swept body path and a supported
+landing on an already walkable surface are required. It preserves horizontal
+velocity and does not apply in the original profile, in mid-air, in liquids,
+on ladders, on moving platforms, while climbing or against another player.
+It is not a teleport or an increase in climb height.
+
+Executed checks:
+
+- Eight Blender collision tests passed, including compact cavities, unchanged
+  architectural openings, oversized instances, rotated panels and no extra
+  collision faces. Log: `.csgopen/logs/general-smoothing-unit.log`.
+- Twenty Source BSP tests passed. Log:
+  `.csgopen/logs/general-smoothing-sourcebsp.log`.
+- Native build and dependency/content checks passed. Logs:
+  `.csgopen/logs/general-smoothing-build.log` and `general-smoothing-check.log`.
+- The native movement fixture passed `MOVEMENT_DONE FAILURES 0` in
+  `.csgopen/logs/general-smoothing-movement-final.log`. Recovery crossed a
+  0.75-unit seam with 0.767 units of rise; a 2-unit barrier, a low ceiling,
+  missing landing support and an airborne actor rejected it. Original-profile
+  movement, knee steps, waist climbs, weapon restrictions, slope barriers,
+  uphill/downhill traversal and jump checks also passed.
+- Eighty repeated slope routes passed with no climbs. The sum of the four
+  route median CPU times was 12,473.5 microseconds, compared with 13,215.0 in
+  the earlier slope-fix benchmark. The uphill routes used fewer physics frames.
+  This is a synthetic movement CPU comparison, not a scene FPS measurement.
+  Logs and measurements are under `.csgopen/general-smoothing-20261006/` in
+  `slope-bench.log` and `slope-performance.json`.
+
+All eight installed packages were regenerated with the final
+`compact-world-bounds-v1` rule. The rule smoothed 1,178 prop instances. Actual
+visible prop triangle counts and world collision triangle counts remain
+unchanged on every map; all visible prop files and world render OBJ files are
+byte-identical to the preceding installed packages. Prop collision totals:
+
+| Map | Smoothed instances | Collision triangles before | Collision triangles after |
+| --- | ---: | ---: | ---: |
+| ar_baggage | 143 | 446,348 | 265,942 |
+| cs_agency | 329 | 393,864 | 268,496 |
+| de_bank | 219 | 400,064 | 343,134 |
+| de_canals | 178 | 586,522 | 566,414 |
+| de_dust2 | 99 | 366,836 | 356,306 |
+| de_lake | 104 | 430,430 | 377,858 |
+| de_safehouse | 30 | 485,142 | 462,290 |
+| de_stmarc | 76 | 312,846 | 283,054 |
+| Total | 1,178 | 3,422,052 | 2,923,494 |
+
+This removes 498,558 prop collision triangles (14.57%). ZIP size decreases from
+724,929,013 to 716,389,014 bytes. Each package passed native compilation, zero
+failed prop decodes, ZIP CRC, namespace, and MPZ/CFG/PNG presence checks. Reports,
+hashes and previous packages are in `.csgopen/general-smoothing-20261006/`:
+`results.json`, `audit.json`, `world-render-audit.json`, and `backups/`.
+Dust2's fresh render decimation added a few triangles, so installation was
+blocked until its previous visible prop files were restored and the map was
+compiled again with the new collision. The first three packages were rebuilt
+with the final rotation guard before these counts were recorded.
+
+The updated Lake package and movement engine passed all 20 earlier routes on
+the timber piles, wall and benches in both directions, without extra climbs or
+jumps: `lake-routes.log` reports `MOVEMENT_DONE FAILURES 0`. Full keyboard/mouse
+coverage of every corner and scene FPS measurement remain pending. St. Marc
+remains excluded from the rotation because of its separate spawn support issue.
+
+The final installed-package run loaded all eight maps. The seven rotation maps
+passed all spawn support, health/team state and map stair-height checks after
+Dust2 was corrected. `maps-final.log` first caught Dust2's default stair height
+after recompilation against a saved profile configuration; the fresh BSP
+configuration was restored into the profile and the map recompiled.
+`dust2-final-verify.log` then reported `DUST2_FINAL_DONE FAILURES 0`, including
+stair height 5. The two St. Marc floor-support failures reproduce its previously
+recorded issue and do not enable it for rotation.
+
+The final production client passed the dedicated loopback multiplayer smoke
+test with `SMOKE_DONE FAILURES 0` in `smoke-final.log` under the same report
+directory. The test server on port 28811 was stopped afterwards.
+`native-checks.json` records the final per-map checks, using the corrected
+Dust2 verification. `git diff --check` passed.
+# LAN launcher validation (2026-10-07)
+
+- Executed: `bash -n scripts/csgopen/server-lan.sh` passed.
+- Code inspection: the launcher uses a separate LAN profile, loads the TDM
+  and server-maps configurations before socket setup, enables LAN discovery
+  and map-package HTTP on all IPv4 interfaces, and disables master registration.
+- Pending manual check: start the launcher and verify discovery and map
+  downloads from another LAN client. No LAN server was started during this check.
+
+
+# Imported stair movement validation (2026-10-07)
+
+The user still reported sticking, predominantly uphill, on internal Dust2
+stairs. The correction is in the engine: a grounded actor on a flat tread
+now attempts the supported tangent move when its next contact is a walkable
+bevel. Previously only actors already following a slope attempted this path,
+so a bevel could be misclassified as a ledge. Immediate supported step recovery
+also uses the map stair height rather than the previous one-unit cap; body
+clearance, swept path and configured step-height limits still apply.
+
+No map package, rendered mesh, collision mesh or polygon count changed in this
+iteration. Existing compact-prop smoothing remains in place.
+
+Executed checks (logs and reproducible local profiles are in
+`.csgopen/stairs-20261007/`):
+
+- The pre-change test client reproduced two complete stops at the walkable
+  bevel in the sampled Dust2 area: progress 23.276 of 36 units, normal
+  `(0.371, 0, 0.928)`, with a flat support normal.
+- Identical twelve routes at three lateral positions on the real installed
+  Dust2 map were compared using the before/after clients: straight uphill,
+  downhill, and uphill at 85/95 degrees. The baseline produced seven failures
+  (two stalls and five unwanted climbs); the final engine completed all twelve
+  without jumps or climbs: `dust-final.log`, `MOVEMENT_DONE FAILURES 0`.
+  The baseline log is `dust-baseline-final.log`; both profiles retain `test.cfg`.
+  Endpoints remain within the stair/landing height range. Earlier exploratory
+  routes whose initial coordinates fell below the map were discarded, and
+  are not counted as successful tests.
+- The synthetic fixture covers eight closely spaced 4.5-unit risers, both
+  directions, a low ceiling and a tall blocking wall. Clean synthetic stairs
+  also passed before the fix; the real Dust2 comparison establishes the
+  regression. The full fixture also checks low/high obstacles, slope limits,
+  jumping, landing support, airborne actors and the original movement profile.
+  `fixture-final.log`: `MOVEMENT_DONE FAILURES 0`, including explicit recovery
+  across a two-unit step within map stair height and blocked low ceilings.
+- All twenty existing Lake routes near the timber piles and wall/benches
+  remain successful without climbs: `lake-final.log`,
+  `MOVEMENT_DONE FAILURES 0`.
+- `scripts/csgopen/dev.sh check` and the production native client/server build
+  passed. The separate opt-in movement client built successfully.
+
+Coverage is automated actor movement on the sampled routes, not an exhaustive
+manual traversal of every corner of every map. Collision normals, true walls
+and ceilings remain authoritative; no unconditional teleport or noclip recovery
+was introduced. The existing StMarc rotation exclusion remains unchanged.
+
+The final production client passed the dedicated loopback multiplayer smoke
+with `SMOKE_DONE FAILURES 0` in `smoke-final.log`. The dedicated server was
+bound only to `127.0.0.1:28811`, with master registration and LAN discovery
+disabled, and was stopped after the test. `git diff --check` passed.
+
+The twelve routes above sampled another Dust2 location, not the curved B-tunnel
+stairs in the later screenshot: Source X is reflected during conversion. Their
+engine comparison remains valid, but does not establish B-stair coverage.
+
+# Curved B-tunnel staircase validation (2026-10-07)
+
+The screenshot identifies the curved Dust2 B-tunnel stairs, from approximately
+`(1216, 990, 2132.16)` to `(1270, 944.5, 2168.16)` in engine coordinates.
+The original converted world retained internal solid/player-clip faces; small
+invisible walking ramps also retained foundation walls. The decimated stair
+prop contributed a separate snag near the lower landing.
+
+The converter now discards fully enclosed brush faces, retaining coincident
+exterior faces. Small, non-solid player-clip ramps with an authored walkable
+incline export walking surfaces rather than foundation walls. Solid brush walls,
+vertical player-clip barriers, displacement terrain and openings keep their
+existing exterior collision. This policy only removes triangles. The curved
+stair prop additionally has a reviewed, model-specific continuous surface in
+`scripts/csgopen/collision-overrides/dust_kasbah_stairs002.json`: 87 triangles
+replace 159; no convex hull closes the central pillar or passage. Other stair
+models keep their geometry. Supported movement recovery also distinguishes
+ordinary uphill velocity from an upward jumping impulse.
+
+Executed checks and local artifacts in `.csgopen/b-stairs-20261007/`:
+
+- The same six complete paths sample the center and offsets of two engine units,
+  uphill and downhill, with floor-height continuity checks and no jump input.
+  `full-b-baseline.log` reproduces four failures with the previous package.
+  `full-b-combined.log` completes all six without climbs:
+  `MOVEMENT_DONE FAILURES 0`. The installed ZIP repeats the same six successes
+  in `full-b-installed.log`, also with `MOVEMENT_DONE FAILURES 0`.
+  Intermediate candidates with incomplete face
+  removal failed and were not installed.
+- Dust2 world collision decreases from 80,578 to 56,902 double-sided triangles;
+  total world/prop collision decreases from 436,884 to 413,064 (5.45%). All render
+  files, textures, map entities, configuration and compiled MPZ are byte-identical.
+  The installed ZIP is 124,947,094 bytes; `final-audit.json` records changed files
+  and SHA-256. Only Dust2 was repackaged during this screenshot-specific iteration.
+- All 24 Source BSP tests and nine Blender collision tests pass, including
+  adjacent volumes, contained brushes, exterior coincidences, player passages,
+  solid ramp sides, large clip ramps and the stair override's bounds/budget.
+- `fixture-final.log`: `MOVEMENT_DONE FAILURES 0`, covering real barriers, low
+  ceilings, risers, slopes, jumping, unsupported/airborne actors and the original
+  profile, plus uphill velocity recovery. `lake-final.log` passes all twenty
+  prior timber/bench routes with `MOVEMENT_DONE FAILURES 0`.
+- Native prerequisite checks and production/test-client builds passed. The
+  production dedicated loopback smoke passed `SMOKE_DONE FAILURES 0` in
+  `smoke-final.log`; master registration was disabled and the server was stopped.
+
+Coverage is automated movement on these sampled paths, not an exhaustive manual
+traversal of every converted map. Restart the game to reload the changed collision
+models from the installed package. St. Marc remains excluded from rotation.
+
+# Long A door collision validation (2026-10-07)
+
+The user reported a temporary snag in Dust2's opened Long A doors. The source
+`dust_door_long_doors_01.mdl` combines two angled leaves with metalwork and small
+wooden details. Its decimated collision retains 729 triangles. The converter now
+builds a separate convex surface for each leaf from the full source geometry,
+using 306 triangles in total. It never wraps both panels in a single hull and
+leaves the architectural doorframe unchanged. The rule is restricted to this
+reviewed model, rejects geometry crossing the panel separation and falls back
+when its triangle budget would increase. There is no new engine movement rule.
+
+Executed artifacts are in `.csgopen/doors-20261007/`:
+
+- Eighteen straight/slightly oblique attempts at the first door compare identical
+  before/after movement: the original mesh stops all eighteen, while the smoother
+  candidate completes seven. These probes are not all unobstructed routes;
+  continued direct contact with an opened panel is allowed to block movement.
+- Twelve guided paths follow the actual gap between the leaves, three approach
+  offsets in both directions at each doorway. `guided-final-candidate.log` passes
+  all twelve without jumps or climbs: `MOVEMENT_DONE FAILURES 0`. Initial north
+  door probes overlapping the real crates in the inner chamber were corrected
+  and are excluded from this successful coverage.
+- The package audit confirms only the prop collision OBJ for Source tile `0_0_0`
+  changed. Both instances use the new leaf geometry. Render meshes, textures,
+  doorframes, world collision, the B staircase override, entities, MPZ and map
+  configuration are byte-identical. Collision decreases by 1,692 double-sided
+  triangles, from 413,064 to 411,372; `audit.json` records the checksum and counts.
+- `installed.log` confirms the installed package passes all twelve door paths,
+  all six curved B-stair routes and two checks that real side obstacles block
+  movement, with `MOVEMENT_DONE FAILURES 0`.
+- All ten Blender collision tests and 24 Source BSP tests pass. Panel separation,
+  original bounds, unrelated frames, crossing geometry and the triangle budget
+  have explicit checks. Native prerequisite checks and the opt-in test build pass.
+- The production loopback multiplayer smoke passes `SMOKE_DONE FAILURES 0` in
+  `smoke-final.log`; the dedicated server was stopped afterward. `git diff --check`
+  passes.
+
+The automated paths sample the openings; manual traversal of every possible
+approach remains open. Restart the game to discard cached collision models.
+
+
+## Dust2 B tunnel entrance: uninterrupted stair running (2026-10-07)
+
+The four shallow exterior steps in the reported screenshot use
+`dust_stairs003_256.mdl`, at Source origin `(-1536, 522, 2)`. The BSP already
+provides their continuous walking ramp. The extra decimated prop collider causes
+long velocity interruptions. Removing only that duplicated collider fixes these
+routes with the existing movement implementation; no additional production
+engine rule was kept from this investigation.
+
+The converter now identifies low rectangular regular stair flights and checks
+world support at the centroid and three interior points of each original tread
+triangle after transforming the instance. Every support height must be within
+-1 to +8 Source units of the tread. Missing, distant or incomplete support keeps
+the prop collider. The test rejects architectural names and tapered geometry.
+The actual four instances of this model were evaluated: only the reported B
+entrance qualifies; the other three retain their 55-triangle collider.
+
+Artifacts are in `.csgopen/short-stairs-20261007/`:
+
+- `before-running.log` and `after-running.log` use the same native test binary,
+  movement settings, starting running velocity and twelve paths: three lanes,
+  straight and slightly oblique uphill approaches, plus three downhill routes.
+  The original package has seven failed continuity checks, with sustained slow
+  periods up to 580 ms. The corrected package passes all twelve, travels the
+  routes in 625–755 ms and reaches the expected upper/lower floor elevations.
+  Eleven paths have no slow physics tick; one has a single 5 ms step-up correction
+  with retained velocity. The regression flags three consecutive slow 5 ms ticks
+  (15 ms) rather than treating one discrete vertical correction as a running stop.
+- `coverage.log` confirms selection of only the supported instance.
+  All eleven Blender collision tests and 24 Source BSP tests pass. Native
+  prerequisite checks, test compilation and production client/server build pass.
+- `audit.json` confirms only one prop collision OBJ changes. Collision decreases
+  from 411,372 to 411,262 double-sided triangles; package size decreases from
+  124,900,457 to 124,897,732 bytes. Render geometry, world collision, all other
+  props, entities, MPZ and configuration are byte-identical. The installed package
+  SHA-256 is `b6a7d1e2ca5c06d93ebac5179bf297fe1318e85ab0d9c6f0343e177cafa0479e`.
+
+The installed package also passes the twelve running routes, twelve guided door
+routes, six internal B stair routes and two real-wall blocking checks in
+`installed.log`, with `MOVEMENT_DONE FAILURES 0`. The production multiplayer
+loopback smoke passes `SMOKE_DONE FAILURES 0` in `smoke-final.log`; its dedicated
+server was stopped afterward. `git diff --check` passes.
+
+This is automated coverage of the reported approaches, not a claim that every
+map location is verified. Restart the game to reload cached collision models.
+
+
+## All converted maps refreshed with collision fixes (2026-10-07)
+
+Reprocessed all eight local CS:GO legacy BSP packages at the existing scale 0.25,
+displacement LOD 2 and 300,000 prop triangle budget. Artifacts, original package
+backups, stages, checksums and exact counts are under
+`.csgopen/regenerate-all-20261007/`. Installation uses an atomic ZIP replacement.
+
+| Map | Collision triangles before | Collision triangles after |
+| --- | ---: | ---: |
+| ar_baggage | 323,546 | 294,634 |
+| cs_agency | 310,680 | 291,912 |
+| de_bank | 365,976 | 356,996 |
+| de_canals | 696,684 | 638,376 |
+| de_dust2 | 411,262 | 411,262 |
+| de_lake | 407,148 | 395,304 |
+| de_safehouse | 492,630 | 479,066 |
+| de_stmarc | 314,196 | 302,066 |
+
+The total falls from 3,322,122 to 3,169,616 double-sided collision triangles:
+152,506 fewer (4.59%). Visible prop and world render OBJ files are byte-identical
+on all eight maps. ZIP CRC, namespaces and MPZ/CFG/PNG presence pass; no package
+increases its visible or collision triangle count. The new authored stair
+support rule also removes 472 redundant prop collision triangles on Canals.
+The remaining reductions come from the previous BSP collision cleanup, now
+applied to the other packages. ZIP sizes total 715,004,631 bytes.
+
+Dust2 already included the latest collision fixes. Its fresh Blender decimation
+added three visible and two collision triangles, so that candidate was rejected.
+Recompiling with the verified prop meshes passed the twelve entrance running
+routes and all twelve door routes but failed one internal B stair lane. The
+final package therefore retains the exact previously verified world collision
+and compiled map/settings as well. This preserves the user-confirmed movement
+and prevents fresh simplification or serialization from changing tested seams.
+`dust2-movement-final.log` passes all twelve running, twelve door, six internal
+stair and two real-wall blocking routes, with `MOVEMENT_DONE FAILURES 0` and
+map stair height 5. The discarded recompile is recorded separately.
+
+`lake-movement.log` passes all twenty earlier timber, wall and bench routes with
+`MOVEMENT_DONE FAILURES 0`. All 24 BSP and eleven Blender regression tests pass.
+The production dedicated-loopback smoke reports `SMOKE_DONE FAILURES 0` in
+`smoke-final.log`; its server was stopped afterward. St. Marc was regenerated
+but remains excluded from rotation for its previously recorded spawn-support
+problem. These checks do not establish movement coverage of every location.
+
+The completed native spawn checks pass all seven rotation maps, including both
+teams, health, floor support and map stair height. `native-checks.json` records
+each successful check and source log: the first four maps in `maps-final.log`,
+Dust2 in `maps-rest-final.log`, and Lake/Safehouse in `maps-last-final.log`.
+The second run was interrupted by the user after a Lake floor assertion failed
+at the 2.5-second sample. The unchanged final Lake package passes the subsequent
+5-second settling checks for both teams. These runs sample selected spawns;
+they do not establish support for every randomized spawn. Installed SHA-256
+hashes and ZIP CRCs were verified again after completion. `git diff --check`
+passes. No commits or pushes were made.
+
+
+## Agency exterior access: diagonal modular staircase (2026-10-07)
+
+The exterior approach near the CT spawn uses two instances of
+`models/props/de_vertigo/step_64x32.mdl` and one
+`models/props/de_vertigo/topstep_16x8.mdl`. The original decimated flight collision
+blocks the central uphill approach at its first tread; the side approaches
+complete with sustained slow periods of 220–230 ms. A first continuous-flight
+candidate clears the first blockage but keeps the slowdown at the upper trim.
+The final collision replaces both flights and their upper connector.
+
+The converter has a reviewed model-specific rule for these two module types:
+each flight uses a closed incline from local height 3 to 35 over its 64-unit run;
+the upper connector has a flat height-3 walking surface. Lower support volumes
+and instance transforms are retained. The twelve-triangle prisms are accepted
+only for the expected nominal footprint and within the original triangle budget.
+Later general smoothing cannot replace the reviewed collision. The render meshes
+and handrails remain unchanged. The other seven converted maps do not use these
+two models, so only Agency needs a package update. There is no engine change.
+
+Artifacts are in `.csgopen/agency-access-20261007/`:
+
+- `baseline.log` reproduces three failed uphill continuity checks, including the
+  central blockage. `candidate-raccordo.log` passes all twelve straight routes.
+- `export-check.log` runs the complete Blender prop export with the production
+  converter: zero failed models, 267,536 prop collision triangles, and only the
+  expected collision tile changes. One unrelated freshly decimated render OBJ
+  differs and is discarded; all installed render files are retained exactly.
+- `installed.log` passes sixteen routes: ten exterior uphill/downhill approaches
+  across three lanes, including oblique central routes, and six routes on the
+  nearby interior staircase. It reports `MOVEMENT_DONE FAILURES 0`, with no climbs
+  and no sustained slow period. Two routes have a single 5 ms discrete correction.
+- All twelve Blender collision tests pass, including ramp geometry, connector
+  height, unknown models, unexpected footprint and small-budget fallbacks.
+  Native prerequisites and `git diff --check` pass.
+- `audit.json` confirms only the prop collision OBJ for Source tile `n1_n2_0`
+  changes. World collision, visible geometry, other props, entities, MPZ and CFG
+  are byte-identical. Total collision decreases from 291,912 to
+  290,952 triangles (960 fewer); ZIP size decreases from
+  59,103,199 to 59,084,115 bytes. Installed SHA-256:
+  `e87d45a0a473376d54412bcb45198dedcd9562ac9629bb999fcfbb0ff3e155f3`. The original package is retained as `cs_agency-before.zip`.
+
+`landing.log` also verifies ten exterior route endpoints after stationary
+settling: each rests on `PHYS_FLOOR` within 0.1 map units of the expected upper
+or lower landing. This distinguishes short airborne stair transitions during
+running from missing support. The production loopback smoke passes
+`SMOKE_DONE FAILURES 0` in `smoke-final.log`; its dedicated server was stopped.
+The final ZIP hash, CRC and single-file change were verified again. Restart the
+game to discard the cached collision model. Manual coverage of every approach
+remains open.
+
+## Full conversion rerun after the Agency access fix (2026-10-07)
+
+The production converter was rerun sequentially on all eight existing BSPs:
+Baggage, Agency, Bank, Canals, Dust2, Lake, Safehouse and St. Marc. All eight
+complete with the native `SOURCEIMPORT_DONE` marker and zero failed prop models.
+The scale (0.25), displacement LOD (2) and render prop budget (300,000) are
+unchanged. Artifacts, backups and per-map reports are retained in
+`.csgopen/regenerate-all-agency-20261007/`.
+
+Installation preserves validated visible prop files and serialized map settings
+and entities. Dust2 also retains its validated world and prop collision files:
+the Agency module rule does not apply there, and a fresh bake previously
+regressed a tested internal stair lane. The new exports for the other seven
+maps reproduce the existing collision assets exactly. `audit.json` confirms
+all installed package contents are byte-identical to the pre-run assets,
+including the corrected Agency staircase. ZIP compression reduces aggregate
+archive size from 714,985,547 to 714,161,849 bytes; total collision remains
+3,168,656 triangles. Every ZIP passes CRC validation and retains its MPZ,
+CFG and preview. No visible geometry or triangle counts increase.
+
+Executed native checks on the installed packages:
+
+- All 49 loading, team, health, stair-height and settled spawn-support checks
+  pass across the seven enabled maps (`maps.log`). St. Marc remains excluded
+  from the rotation because its previously documented spawn issue is unresolved.
+- Agency's sixteen exterior and interior routes pass, including diagonal
+  uphill/downhill approaches (`agency-movement.log`).
+- Dust2's thirty-two cases pass: shallow entrance steps, Long A doors, internal
+  B stairs and true wall barriers (`dust2-movement.log`).
+- Lake's twenty cases on log piles and the wall/bench approaches pass
+  (`lake-movement.log`). Each movement suite ends with
+  `MOVEMENT_DONE FAILURES 0`.
+- Native prerequisites and `git diff --check` pass. No gameplay or engine
+  code was changed for this rerun. Manual exploration of every map remains open.
+
+The production dedicated-loopback smoke passes `SMOKE_DONE FAILURES 0`
+(`smoke.log`); the dedicated server was stopped after the test. Restart the
+client to reload the installed packages and discard cached collision models.
+
+## Safehouse ladders and upper-window access (2026-10-08)
+
+Source Safehouse contains three ladder-content brushes covering its two
+aluminium ladders. The converter previously exported neither ladder material
+nor equivalent traversal behavior. It now extracts playable ladder brush
+bounds, adds hull-contact and upper-exit clearance, and emits one-unit-grid
+ladder materials. No solid geometry is added. TDM forward input ascends without
+jumping or requiring an upward view; backward descends and strafe is retained.
+Vertical ascent avoids roof overhangs; forward movement resumes near the upper
+material boundary. Pitch-controlled original-profile behavior is preserved.
+
+The reviewed House window frame models (`windowframe_54x76.mdl` and
+`windowframe_54x44.mdl`) now use four closed collision volumes around their
+openings. Their footprints and height variants are checked, and unexpected
+geometry or budgets below 48 triangles retain the original collision. This
+prevents trim decimation from obstructing the window hole while keeping its
+posts, sill and lintel. Render meshes are unchanged.
+
+The TDM preset reduces player and bot scale from 1 to 0.8. Total standing height
+is 17.12 rather than 21.4 world units; radius is 3.4 rather than 4.25. Low crouch
+uses 48% eye height in CSGOpen movement (total height 8.634), with the existing
+automatic headroom checks. Original movement retains the 70% ratio. Step and
+climb settings are adjusted to 8.75/16.25, preserving effective 7/13-unit
+clearance after actor scaling. Weight and jump trajectory also change with
+scale; actual map routes are tested below.
+
+Artifacts are in `.csgopen/safehouse-access-20261008/`. Executed checks:
+
+- `unit.log`: all 25 BSP tests pass, including ladder triggers and unchanged
+  solid collision. `props-unit.log`: all 13 Blender tests pass, including frame
+  apertures, triangle budgets and unknown-model fallbacks.
+- The full production prop exporter decodes all models successfully and reduces
+  prop collision from 462,290 to 458,286 triangles. There are 38 collision
+  carriers rather than 40; the map is recompiled with the corresponding model
+  registry, original 25 spawns and ladder materials.
+- `safehouse-movement-final.log` passes seventeen cases: six full ladder-to-roof
+  routes (both ladders at pitches -20, 0 and 20), six standing upper-window
+  crossings (three central lanes in both directions), three jump-and-crouch
+  approaches from the high part of the shed roof into the upper room, and two
+  low-window crouch-clearance crossings. Ladder routes finish supported on the
+  roof and outside ladder material. Every test uses actual converted collision;
+  the upper sill remains an obstacle requiring the appropriate approach.
+- `maps-final.log` passes all 49 loading, team, health, stair-height and settled
+  spawn checks on the seven enabled maps. An earlier run caught stairheight
+  4.1 when recompiling an existing profile. The converter now explicitly applies
+  the intended stairheight after loading map configuration, including when the
+  saved profile shadows generated CFG. Safehouse is recompiled and verified at 5.
+- `agency-movement-final.log`, `dust2-movement-final.log` and
+  `lake-movement-final.log` pass all 16, 32 and 20 existing traversal cases with
+  the new dimensions. Each suite reports `MOVEMENT_DONE FAILURES 0`.
+- `audit.json` verifies ZIP CRC, unchanged visible assets and world collision,
+  and total collision 479,066 → 475,062 (4,004 fewer triangles). ZIP size is
+  51,757,978 bytes versus 51,787,390 before. The original package is retained as
+  `before.zip`; installed SHA-256 is
+  `d42684748e51779ed775cb0c2f5ca4d273534dc262c3aaf4050a4f80abd8aa6d`.
+
+Earlier exploratory failures remain in their logs, including blocked roof
+transitions, insufficient frame clearance and an approach from the lower part
+of the roof. The installed-package results above are the final checks. St. Marc
+remains excluded for its previously documented spawn issue. Manual exploration
+of every ladder entry angle and every window remains open.
+
+The production dedicated-loopback smoke passes `SMOKE_DONE FAILURES 0` in
+`smoke-verified.log`, including synchronized player/bot scale and effective
+step/climb thresholds; the server was stopped after the test. The first fresh
+smoke profile omitted the launcher's TDM `localinit.cfg` and failed five initial
+utility-inventory checks (`smoke-final.log`). The verified rerun uses the same
+TDM initialization as the established production smoke profile and retains every
+inventory assertion. Native prerequisites and `git diff --check` pass. Restart
+the client and any running dedicated server to load the updated binary, rules
+and Safehouse package.
+
+### First-person body visibility (2026-10-08)
+
+The TDM client preset now sets `firstpersonmodel 1` and `firstpersoncamera 0`.
+Inspection of `renderavatar()` confirms that this retains weapon/arms rendering
+and omits the separate first-person body model that can enter the view on stairs.
+World-player and shadow rendering remain separate. No movement, player dimensions,
+map geometry or converter settings change in this fix.
+
+The production client/dedicated-loopback smoke in
+`.csgopen/firstperson-body-20261008/smoke.log` passes both new view-setting
+assertions and reports `SMOKE_DONE FAILURES 0`. The test server was stopped.
+Native prerequisites and `git diff --check` pass. This verifies runtime settings
+and the renderer path; manual visual confirmation on Safehouse stairs remains
+open. Relaunch the TDM client to apply the preset after persisted preferences.

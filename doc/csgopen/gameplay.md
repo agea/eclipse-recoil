@@ -99,8 +99,8 @@ Dichiarazioni: `vars.h`, capacità actor in `player.h`; usi in
 | `moveaccelscale` (nuovo C++) | 1 → 0.75 | moltiplicatore del tasso di risposta a terra; FVAR_NONZERO..FVAR_MAX |
 | `movebrakescale` (nuovo C++) | 1 → 1.25 | moltiplicatore del tasso di risposta senza input; stessi limiti; ridotto da 1.5 dopo il primo test manuale |
 | `csgopenmovement` | 0 → 1 | abilita il superamento automatico degli ostacoli; booleano |
-| `csgopenstepheight` | 7 → 7 | altezza rapida, poco sopra il ginocchio; 0..32 unità mondo |
-| `csgopenclimbheight` | 13 → 13 | altezza massima dell’arrampicata, poco sopra la cintura; 0..32 unità mondo |
+| `csgopenstepheight` | 7 → 8.75 | actor-scaled threshold; 7 world units with player/bot scale 0.8 |
+| `csgopenclimbheight` | 13 → 16.25 | actor-scaled threshold; 13 world units with player/bot scale 0.8 |
 | `csgopenclimbtime` | 450 → 450 | durata della salita; 100..2000 millisecondi |
 | `movestepup`, `movestepdown` | 0.95, 1.15 → 1, 1 | nessun modificatore di velocità sui gradini |
 | `impulsejump` | 1.5 → 1.1 | moltiplicatore del salto a terra |
@@ -128,12 +128,27 @@ non raggiungibili restano bloccanti. La salita richiede appoggio a terra;
 acqua, scale a pioli, piattaforme mobili e attori enemy conservano il movimento
 ordinario. Le rampe e i gradini ravvicinati usano la soglia per ciascun bordo.
 
-Grounded players and bots already following a walkable slope first try a
+Grounded players and bots entering or following a walkable slope first try a
 short tangent move with clearance and floor support. If it fails, the normal
 ramp/ledge checks still apply. Walkable slope limits, obstacle heights and
 collision meshes are unchanged. The check is gated by `csgopenmovement` and
 does not apply in liquids, on ladders or to enemy actors. No terrain
 subdivision or displacement LOD change is required.
+
+When an immediate collision remains, the TDM profile also checks a supported
+destination for the current horizontal displacement within the map stair
+height (also capped by the configured actor step height).
+This handles seams and nearby treads without relying on the farther ledge probe. The whole
+body path must remain clear; player contacts, ceilings, unsupported landings,
+liquids, ladders, moving platforms and airborne actors cannot use this recovery.
+It preserves horizontal velocity and the existing walkable slope limit, and
+adds no collision geometry. The original profile keeps the recovery disabled.
+
+If the traversal probe rejects a small edge while supported by a flat floor,
+the CSGOpen profile also tries the native step solver within the map stair
+height before sliding to a stop. This handles seams between imported triangle
+carriers; taller obstacles still require the normal climb and clearance checks.
+The original profile keeps its existing solver path.
 
 Durante l’arrampicata l’arma sparisce, salvo la pistola che resta visibile e
 utilizzabile. Le altre armi non possono sparare o ricaricare. Cambio, raccolta e
@@ -542,3 +557,37 @@ utility e armi nuove bloccati nel preset per non aggirare la scelta esclusiva;
 restano ammessi i rifornimenti di munizioni delle armi già possedute. Il menu
 usa callback per slot, salva playerloadweap e svuota le utility scegliendo SMG;
 un tipo granata svuota la secondaria. Rocket conserva 1+6 colpi come primaria.
+
+Supported step recovery accepts the vertical velocity induced by walking up the
+current floor slope. Upward impulses above that component still disable recovery,
+so jumping does not acquire extra supported steps.
+
+
+### Converted-map player dimensions and ladders (2026-10-08)
+
+The TDM preset sets both player and bot scale to 0.8. Standing total collision
+height is 17.12 world units (eye height 16.32), with radius 3.4. Low crouch uses
+48% of eye height in CSGOpen movement, giving total height 8.634; the original
+profile retains its 70% low-crouch ratio and default actor scale. Automatic
+crouch still uses the existing clearance checks. Step and climb settings are
+compensated for actor scale, preserving the previously tested effective heights
+of 7 and 13 world units. Actor scale also affects weight and jump trajectory;
+the movement suite verifies actual converted-map routes after the change.
+
+Source ladder brushes are converted into localized ladder materials. Holding
+forward climbs even with a downward view; backward descends and strafe remains
+available. Most of the ascent is vertical to avoid roof overhangs; horizontal
+forward motion resumes near the upper material boundary. Original movement
+retains pitch-controlled ladder behavior. Safehouse's upper room can be entered
+from the high part of the shed roof with a jump and crouch; the sill remains a
+real obstacle. The converter retains the visible windows and uses four simple
+collision volumes for the reviewed House frame models to preserve their holes.
+
+### First-person presentation on stairs (2026-10-08)
+
+The TDM client preset uses `firstpersonmodel 1` and `firstpersoncamera 0`:
+weapon/arms remain visible, while the separate first-person body is omitted.
+This prevents leg animations from obscuring the view on stairs after the
+converted-map dimension changes. The option affects local rendering only;
+actor dimensions, movement, collision, third-person player models and world
+shadows remain unchanged. The original gameplay profile retains its defaults.

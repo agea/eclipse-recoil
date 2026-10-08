@@ -28,6 +28,215 @@ namespace movementtest
         loopi(100) physics::moveplayer(&d, 10, false, 5);
     }
 
+    ICOMMAND(0, movementseam, "i", (int *which),
+    {
+        gameent d;
+        actor(d, 940+30*(*which), W_SMG);
+        d.o.x = 155.5f;
+        d.move = 1;
+        vec before(d.o);
+        vec delta(5, 0, 0);
+        bool crossed = physics::tryseamstep(&d, delta);
+        conoutf(colourwhite, "MOVEMENT_SEAM %d CROSSED %d RISE %.3f", *which, crossed ? 1 : 0, d.o.z-before.z);
+        check(*which == 0 ? crossed && d.o.z-before.z <= 1.05f : !crossed && d.o == before,
+            *which == 0 ? "small_seam_supported_and_bounded" : "seam_recovery_preserves_barrier_and_ceiling");
+        d.o = before;
+        bool stepped = physics::tryseamstep(&d, delta, physics::stairheight);
+        check(*which < 2 ? stepped && d.o.z-before.z <= physics::stairheight+0.05f : !stepped && d.o == before,
+            *which < 2 ? "local_step_uses_map_stair_height" : "local_step_preserves_low_ceiling");
+        d.o = before;
+        vec savedfloor(d.floor);
+        vec savedvel(d.vel);
+        d.floor = vec(-1, 0, 1).normalize();
+        d.vel = vec(3, 0, 3);
+        bool uphill = physics::tryseamstep(&d, delta);
+        check(*which == 0 ? uphill : !uphill, "uphill_velocity_is_not_a_jump");
+        d.o = before;
+        d.floor = vec(0, 0, 1);
+        d.vel = vec(0, 0, 3);
+        check(!physics::tryseamstep(&d, delta) && d.o == before, "upward_jump_has_no_step_recovery");
+        d.floor = savedfloor;
+        d.vel = savedvel;
+        d.o = before;
+        int enabled = csgopenmovement;
+        csgopenmovement = 0;
+        check(!physics::tryseamstep(&d, delta) && d.o == before, "original_profile_has_no_seam_recovery");
+        csgopenmovement = enabled;
+        d.o = before;
+        d.o.z += 10;
+        vec unsupported(d.o);
+        check(!physics::tryseamstep(&d, delta) && d.o == unsupported, "seam_recovery_requires_landing_support");
+        d.o = before;
+        d.physstate = PHYS_FALL;
+        d.o.z += 2;
+        before = d.o;
+        check(!physics::tryseamstep(&d, delta) && d.o == before, "seam_recovery_requires_grounded_actor");
+        cleardynentcache();
+    });
+
+    // Full curved B-tunnel staircase, including both landings (Source X is reflected).
+    ICOMMAND(0, movementbstairs, "iii", (int *direction, int *lane, int *blocked),
+    {
+        if((*direction != 1 && *direction != -1) || *lane < -3 || *lane > 3) return;
+        int clock = lastmillis;
+        vector<vec> path;
+        path.add(vec(1216.00000f, 990.00000f, 2132.16000f));
+        path.add(vec(1215.95877f, 982.20272f, 2134.31500f));
+        path.add(vec(1215.96104f, 978.37224f, 2136.31500f));
+        path.add(vec(1216.11854f, 973.11844f, 2138.31500f));
+        path.add(vec(1216.57355f, 969.01145f, 2140.31500f));
+        path.add(vec(1217.47232f, 965.01894f, 2142.31500f));
+        path.add(vec(1219.02974f, 961.21465f, 2144.31500f));
+        path.add(vec(1221.04180f, 957.72696f, 2146.31500f));
+        path.add(vec(1223.47919f, 954.46145f, 2148.31500f));
+        path.add(vec(1226.45275f, 951.63234f, 2150.31500f));
+        path.add(vec(1229.67876f, 949.27630f, 2152.31500f));
+        path.add(vec(1233.16339f, 947.31469f, 2154.31500f));
+        path.add(vec(1237.03104f, 945.85465f, 2156.31500f));
+        path.add(vec(1240.97411f, 944.96095f, 2158.31500f));
+        path.add(vec(1245.11517f, 944.60328f, 2160.31500f));
+        path.add(vec(1250.12004f, 944.52106f, 2162.31500f));
+        path.add(vec(1254.24757f, 944.51420f, 2164.31500f));
+        path.add(vec(1258.26661f, 944.49315f, 2166.31500f));
+        path.add(vec(1262.00000f, 944.50000f, 2168.16000f));
+        path.add(vec(1270.00000f, 944.50000f, 2168.16000f));
+        vector<vec> guide;
+        loopv(path) guide.add(path[i]);
+        loopv(path)
+        {
+            vec tangent(guide[min(i+1, path.length()-1)]);
+            tangent.sub(guide[max(i-1, 0)]);
+            tangent.z = 0;
+            tangent.normalize();
+            path[i].add(vec(-tangent.y, tangent.x, 0).mul(*lane*2));
+        }
+        if(*direction < 0) path.reverse();
+        gameent d;
+        actor(d, path[0].y, W_SMG);
+        d.o = vec(path[0]).addz(d.height+1);
+        loopi(150) physics::moveplayer(&d, 10, false, 5);
+        bool supportedstart = fabsf(d.feetpos().z-path[0].z) < 4;
+        bool continuous = supportedstart;
+        int target = 1;
+        int climbs = 0;
+        bool previous = false;
+        d.move = 1;
+        loopi(6000)
+        {
+            if(d.feetpos().z < path[target].z-4) continuous = false;
+            vec delta(path[target]);
+            delta.sub(d.feetpos());
+            delta.z = 0;
+            vec along(path[target]);
+            along.sub(path[target-1]);
+            along.z = 0;
+            along.normalize();
+            vec passed(d.feetpos());
+            passed.sub(path[target]);
+            if(delta.magnitude() < 1.25f || (target < path.length()-1 && passed.dot(along) >= 0))
+            {
+                if(++target == path.length()) break;
+                delta = vec(path[target]).sub(d.feetpos());
+                delta.z = 0;
+            }
+            d.yaw = atan2f(-delta.x, delta.y)/RAD;
+            lastmillis = clock+i*5;
+            physics::moveplayer(&d, 10, true, 5);
+            if(d.climbing && !previous) climbs++;
+            previous = d.climbing;
+        }
+        conoutf(colourwhite, "MOVEMENT_B_STAIRS DIR %d LANE %d TARGET %d/%d STARTSUPPORT %d CLIMBS %d END %.3f %.3f %.3f", *direction, *lane, target, path.length(), supportedstart, climbs, d.o.x, d.o.y, d.feetpos().z);
+        check(supportedstart && continuous && !climbs && (*blocked ? target < path.length() : target == path.length() && fabsf(d.feetpos().z-path.last().z) < 4),
+            *blocked ? "b_staircase_pillar_blocks" : "full_b_staircase_without_jump_or_climb");
+        lastmillis = clock;
+        cleardynentcache();
+    });
+
+    // Long A doors: keep the intended S-shaped gap between the opened leaves.
+    ICOMMAND(0, movementdoor, "iii", (int *door, int *direction, int *lane),
+    {
+        if(*door < 0 || *door > 1 || (*direction != 1 && *direction != -1) || abs(*lane) > 1) return;
+        int clock = lastmillis;
+        float x = *door ? 784 : 783.75f;
+        float y = *door ? 859 : 747;
+        vector<vec> path;
+        // The inner chamber has a real crate beside the north doorway.
+        // Start outside its footprint rather than testing from inside it.
+        path.add(vec(x+(*door ? 10+*lane : *lane*3), y-25, 2160.16f));
+        path.add(vec(x+(*door ? 10 : 4)+*lane, y-12, 2160.16f));
+        path.add(vec(x+3+*lane, y-5, 2160.16f));
+        path.add(vec(x+*lane, y, 2160.16f));
+        path.add(vec(x-3+*lane, y+5, 2160.16f));
+        path.add(vec(x-4+*lane, y+12, 2160.16f));
+        path.add(vec(x+*lane*3, y+25, 2160.16f));
+        if(*direction < 0) path.reverse();
+        gameent d;
+        actor(d, path[0].y, W_SMG);
+        d.o = vec(path[0]).addz(d.height+1);
+        loopi(150) physics::moveplayer(&d, 10, false, 5);
+        bool supported = fabsf(d.feetpos().z-path[0].z) < 4;
+        int target = 1;
+        int climbs = 0;
+        bool previous = false;
+        d.move = 1;
+        loopi(6000)
+        {
+            if(fabsf(d.feetpos().z-2160.16f) > 4) supported = false;
+            vec delta(path[target]);
+            delta.sub(d.feetpos());
+            delta.z = 0;
+            vec along(path[target]);
+            along.sub(path[target-1]);
+            along.z = 0;
+            along.normalize();
+            vec passed(d.feetpos());
+            passed.sub(path[target]);
+            if(delta.magnitude() < 1.25f || (target < path.length()-1 && passed.dot(along) >= 0))
+            {
+                if(++target == path.length()) break;
+                delta = vec(path[target]).sub(d.feetpos());
+                delta.z = 0;
+            }
+            d.yaw = atan2f(-delta.x, delta.y)/RAD;
+            lastmillis = clock+i*5;
+            physics::moveplayer(&d, 10, true, 5);
+            if(d.climbing && !previous) climbs++;
+            previous = d.climbing;
+        }
+        conoutf(colourwhite, "MOVEMENT_DOOR %d DIR %d LANE %d TARGET %d/%d SUPPORT %d CLIMBS %d END %.3f %.3f %.3f", *door, *direction, *lane, target, path.length(), supported, climbs, d.o.x, d.o.y, d.feetpos().z);
+        check(target == path.length() && supported && !climbs, "open_door_without_jump_or_climb");
+        lastmillis = clock;
+        cleardynentcache();
+    });
+
+    ICOMMAND(0, movementstairs, "ii", (int *which, int *direction),
+    {
+        int clock = lastmillis;
+        gameent d;
+        actor(d, 500+30*(*which), W_SMG);
+        d.o = vec(*direction > 0 ? 130 : 255, 500+30*(*which), (*direction > 0 ? 512 : 548)+d.height+0.1f);
+        d.yaw = *direction > 0 ? 270 : 90;
+        loopi(150) physics::moveplayer(&d, 10, false, 5);
+        float start = d.o.x;
+        d.move = 1;
+        int climbs = 0;
+        bool previous = false;
+        loopi(2000)
+        {
+            lastmillis = clock+i*5;
+            physics::moveplayer(&d, 10, true, 5);
+            if(d.climbing && !previous) climbs++;
+            previous = d.climbing;
+            if((d.o.x-start)*(*direction) >= 110) break;
+        }
+        float progress = (d.o.x-start)*(*direction);
+        conoutf(colourwhite, "MOVEMENT_STAIRS %d DIR %d PROGRESS %.3f CLIMBS %d Z %.3f", *which, *direction, progress, climbs, d.feetpos().z);
+        check(*which == 0 ? progress >= 110 && !climbs : progress < 110 && !climbs,
+            *which == 0 ? "close_stairs_walk_without_climb" : "stair_ceiling_and_wall_block");
+        lastmillis = clock;
+        cleardynentcache();
+    });
+
     ICOMMAND(0, movementcase, "i", (int *which),
     {
         int index = *which;
@@ -94,6 +303,91 @@ namespace movementtest
         cleardynentcache();
     });
 
+    ICOMMAND(0, movementjumpwindow, "fffff", (float *x, float *y, float *z, float *yaw, float *distance),
+    {
+        int clock = lastmillis;
+        gameent d;
+        actor(d, *y, W_SMG);
+        d.o = vec(*x, *y, *z+d.height+0.1f);
+        d.yaw = *yaw;
+        loopi(100) physics::moveplayer(&d, 10, false, 5);
+        vec start(d.feetpos());
+        vec direction(-sinf(*yaw*RAD), cosf(*yaw*RAD), 0);
+        d.move = 1;
+        d.action[AC_JUMP] = true;
+        float progress = 0;
+        loopi(1000)
+        {
+            lastmillis = clock+i*5;
+            physics::moveplayer(&d, 10, true, 5);
+            d.action[AC_JUMP] = false;
+            if(i >= 10 && i < 30) d.height = max(d.zradius*0.48f, d.height-d.zradius*0.52f/20);
+            progress = vec(d.feetpos()).sub(start).dot(direction);
+            if(progress >= *distance) break;
+        }
+        d.move = 0;
+        loopi(200) physics::moveplayer(&d, 10, false, 5);
+        conoutf(colourwhite, "MOVEMENT_JUMP_WINDOW PROGRESS %.3f END %.3f %.3f %.3f STATE %d", progress, d.o.x, d.o.y, d.feetpos().z, d.physstate);
+        check(progress >= *distance && d.physstate >= PHYS_SLOPE, "roof_window_jump_crouch_reaches_room");
+        lastmillis = clock;
+        cleardynentcache();
+    });
+
+    ICOMMAND(0, movementwindow, "fffffi", (float *x, float *y, float *z, float *yaw, float *distance, int *duck),
+    {
+        gameent d;
+        actor(d, *y, W_SMG);
+        if(*duck) d.height = d.zradius*(csgopenmovement ? 0.48f : CROUCHLOW);
+        d.o = vec(*x, *y, *z+d.height+0.1f);
+        d.yaw = *yaw;
+        vec dir;
+        vecfromyawpitch(d.yaw, 0, 1, 0, dir);
+        float progress = 0;
+        while(progress < *distance)
+        {
+            d.o.add(vec(dir).mul(0.1f));
+            if(collide(&d, vec(dir), 0.f, false))
+            {
+                conoutf(colourwhite, "MOVEMENT_WINDOW_CONTACT XYZ %.3f %.3f %.3f NORMAL %.3f %.3f %.3f", d.o.x, d.o.y, d.feetpos().z, collidewall.x, collidewall.y, collidewall.z);
+                break;
+            }
+            progress += 0.1f;
+        }
+        conoutf(colourwhite, "MOVEMENT_WINDOW DUCK %d HEIGHT %.3f PROGRESS %.3f", *duck, d.height+d.aboveeye, progress);
+        check(progress >= *distance, "source_window_has_body_clearance");
+        cleardynentcache();
+    });
+
+    ICOMMAND(0, movementladder, "ffffff", (float *x, float *y, float *z, float *yaw, float *pitch, float *rise),
+    {
+        int clock = lastmillis;
+        gameent d;
+        actor(d, *y, W_SMG);
+        d.o = vec(*x, *y, *z+d.height+0.1f);
+        d.yaw = *yaw;
+        d.pitch = *pitch;
+        loopi(100) physics::moveplayer(&d, 10, false, 5);
+        float start = d.feetpos().z;
+        float highest = start;
+        int contacts = 0;
+        d.move = 1;
+        loopi(1000)
+        {
+            lastmillis = clock+i*5;
+            physics::moveplayer(&d, 10, true, 5);
+            if(physics::laddercheck(&d)) contacts++;
+            highest = max(highest, d.feetpos().z);
+            if(highest-start >= *rise && !physics::laddercheck(&d) && d.physstate >= PHYS_SLOPE) break;
+        }
+        d.move = 0;
+        loopi(200) physics::moveplayer(&d, 10, false, 5);
+        conoutf(colourwhite, "MOVEMENT_LADDER CONTACTS %d RISE %.3f END %.3f %.3f %.3f STATE %d HEIGHT %.3f", contacts, highest-start, d.o.x, d.o.y, d.feetpos().z, d.physstate, d.height+d.aboveeye);
+        check(contacts > 0 && highest-start >= *rise, "ladder_forward_without_jump");
+        check(d.physstate >= PHYS_SLOPE && !physics::laddercheck(&d) && d.feetpos().z >= start+*rise-2, "ladder_reaches_supported_roof");
+        lastmillis = clock;
+        cleardynentcache();
+    });
+
     ICOMMAND(0, movementroute, "fffffi", (float *x, float *y, float *z, float *dx, float *distance, int *blocked),
     {
         int clock = lastmillis;
@@ -117,6 +411,102 @@ namespace movementtest
         conoutf(colourwhite, "MOVEMENT_ROUTE Y %.3f DIRECTION %.0f PROGRESS %.3f CLIMBS %d", *y, *dx, (d.o.x-start)*(*dx), climbs);
         if(*blocked) check((d.o.x-start)*(*dx) < *distance && !climbs, "authored_playerclip_blocks_route");
         else check((d.o.x-start)*(*dx) >= *distance && !climbs, "supported_route_without_climb_or_jump");
+        lastmillis = clock;
+        cleardynentcache();
+    });
+
+    ICOMMAND(0, movementpath, "fffffi", (float *x, float *y, float *z, float *yaw, float *distance, int *blocked),
+    {
+        int clock = lastmillis;
+        gameent d;
+        actor(d, *y, W_SMG);
+        d.o = vec(*x, *y, *z+d.height+0.1f);
+        d.yaw = *yaw;
+        loopi(150) physics::moveplayer(&d, 10, false, 5);
+        vec start(d.feetpos());
+        vec direction(-sinf(*yaw*RAD), cosf(*yaw*RAD), 0);
+        d.move = 1;
+        int climbs = 0;
+        bool previous = false;
+        loopi(1600)
+        {
+            lastmillis = clock+i*5;
+            physics::moveplayer(&d, 10, true, 5);
+            if(d.climbing && !previous) climbs++;
+            previous = d.climbing;
+            if(vec(d.o).sub(start).dot(direction) >= *distance) break;
+        }
+        float progress = vec(d.o).sub(start).dot(direction);
+        if(progress < *distance)
+        {
+            vec old(d.o);
+            vec probe(direction);
+            probe.projectxy(d.floor).mul(0.2f);
+            d.o.add(probe);
+            bool hit = collide(&d, probe);
+            conoutf(colourwhite, "MOVEMENT_PATH_CONTACT HIT %d INSIDE %d NORMAL %.3f %.3f %.3f DIR %.3f %.3f %.3f", hit, collideinside, collidewall.x, collidewall.y, collidewall.z, probe.x, probe.y, probe.z);
+            d.o = old;
+        }
+        conoutf(colourwhite, "MOVEMENT_PATH START %.3f %.3f %.3f YAW %.1f PROGRESS %.3f END %.3f %.3f %.3f FLOOR %.3f %.3f %.3f STATE %d CLIMBS %d", start.x, start.y, start.z, *yaw, progress, d.o.x, d.o.y, d.feetpos().z, d.floor.x, d.floor.y, d.floor.z, d.physstate, climbs);
+        check((*blocked ? progress < *distance : progress >= *distance) && !climbs, *blocked ? "path_obstacle_blocks" : "path_without_climb_or_jump");
+        lastmillis = clock;
+        cleardynentcache();
+    });
+
+    ICOMMAND(0, movementflow, "fffffi", (float *x, float *y, float *z, float *yaw, float *distance, int *blocked),
+    {
+        int clock = lastmillis;
+        gameent d;
+        actor(d, *y, W_SMG);
+        d.o = vec(*x, *y, *z+d.height+0.1f);
+        d.yaw = *yaw;
+        loopi(150) physics::moveplayer(&d, 10, false, 5);
+        vec start(d.feetpos());
+        vec direction(-sinf(*yaw*RAD), cosf(*yaw*RAD), 0);
+        d.move = 1;
+        d.vel = vec(direction).mul(physics::movevelocity(&d, false));
+        int climbs = 0;
+        int slowframes = 0;
+        int slowrun = 0;
+        int maxslowrun = 0;
+        float minadvance = 1e10f;
+        int elapsed = 0;
+        bool previous = false;
+        loopi(1600)
+        {
+            lastmillis = clock+i*5;
+            vec before(d.o);
+            physics::moveplayer(&d, 10, true, 5);
+            float advance = vec(d.o).sub(before).dot(direction);
+            elapsed = (i+1)*5;
+            {
+                minadvance = min(minadvance, advance);
+                if(advance < 0.1f)
+                {
+                    if(!slowframes) conoutf(colourwhite, "MOVEMENT_FLOW_FIRST_SLOW XYZ %.3f %.3f %.3f FLOOR %.3f %.3f %.3f VEL %.3f %.3f %.3f STATE %d CLIMB %d", d.o.x, d.o.y, d.feetpos().z, d.floor.x, d.floor.y, d.floor.z, d.vel.x, d.vel.y, d.vel.z, d.physstate, d.climbing);
+                    slowframes++;
+                    maxslowrun = max(maxslowrun, ++slowrun);
+                }
+                else slowrun = 0;
+            }
+            if(d.climbing && !previous) climbs++;
+            previous = d.climbing;
+            if(vec(d.o).sub(start).dot(direction) >= *distance) break;
+        }
+        conoutf(colourwhite, "MOVEMENT_FLOW MS %d SLOW %d MAXPAUSE_MS %d MINADVANCE %.4f", elapsed, slowframes, maxslowrun*5, minadvance);
+        float progress = vec(d.o).sub(start).dot(direction);
+        if(progress < *distance)
+        {
+            vec old(d.o);
+            vec probe(direction);
+            probe.projectxy(d.floor).mul(0.2f);
+            d.o.add(probe);
+            bool hit = collide(&d, probe);
+            conoutf(colourwhite, "MOVEMENT_PATH_CONTACT HIT %d INSIDE %d NORMAL %.3f %.3f %.3f DIR %.3f %.3f %.3f", hit, collideinside, collidewall.x, collidewall.y, collidewall.z, probe.x, probe.y, probe.z);
+            d.o = old;
+        }
+        conoutf(colourwhite, "MOVEMENT_PATH START %.3f %.3f %.3f YAW %.1f PROGRESS %.3f END %.3f %.3f %.3f FLOOR %.3f %.3f %.3f STATE %d CLIMBS %d", start.x, start.y, start.z, *yaw, progress, d.o.x, d.o.y, d.feetpos().z, d.floor.x, d.floor.y, d.floor.z, d.physstate, climbs);
+        check((*blocked ? progress < *distance : progress >= *distance) && !climbs && (*blocked || maxslowrun < 3), *blocked ? "path_obstacle_blocks" : "path_without_climb_or_jump");
         lastmillis = clock;
         cleardynentcache();
     });

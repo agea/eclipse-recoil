@@ -265,7 +265,7 @@ namespace physics
 
     bool laddercheck(physent *d)
     {
-        if(!gameent::is(d) || d->pitch < 0) return false;
+        if(!gameent::is(d) || (!csgopenmovement && d->pitch < 0)) return false;
 
         if(!isladder(d->inmaterial)) return false;
 
@@ -471,7 +471,7 @@ namespace physics
         if(d->type == ENT_CAMERA || d->isnophys() || isfloating(d) || PHYS(gravity) == 0 || d->weight == 0) return true;
         if(d->isalive())
         {
-            if(!onlyfloat && (laddercheck(d) || liquidcheck(d, 1.0f))) return true;
+            if(!onlyfloat && ((!csgopenmovement && laddercheck(d)) || liquidcheck(d, 1.0f))) return true;
             if(gameent::is(d) && A(((gameent *)d)->actortype, abilities)&(1<<A_A_FLOAT)) return true;
         }
         return false;
@@ -797,7 +797,7 @@ namespace physics
         return true;
     }
 
-    bool traversestand(physent *d, const vec &base, float maxrise, vec &stand, vec &support, bool needsupport = true)
+    bool traversestand(physent *d, const vec &base, float maxrise, vec &stand, vec &support, bool needsupport = true, float supportz = floorz)
     {
         vec old(d->o);
         float low = 0, high = 0;
@@ -824,7 +824,7 @@ namespace physics
             if(needsupport)
             {
                 d->o = vec(stand).subz(0.15f);
-                found = collide(d, vec(0, 0, -1), floorz) && !collideplayer && collidewall.z >= floorz && high <= maxrise+0.05f;
+                found = collide(d, vec(0, 0, -1), supportz) && !collideplayer && collidewall.z >= supportz && high <= maxrise+0.05f;
                 if(found) support = collidewall;
             }
         }
@@ -938,6 +938,35 @@ namespace physics
         return true;
     }
 
+    bool tryseamstep(gameent *d, const vec &dir, float maxrise = 1.0f)
+    {
+        // A far tread probe can reject a tiny seam beside a larger obstacle.
+        // Test only this frame's displacement, within the map's stair height.
+        if(!csgopenmovement || d->state != CS_ALIVE || d->actortype >= A_ENEMY ||
+            d->physstate < PHYS_SLOPE || d->physstate > PHYS_STEP_DOWN ||
+            !(d->move || d->strafe) || d->climbing ||
+            liquidcheck(d) || laddercheck(d) || entities::currentpassenger(d)) return false;
+        // Positive vertical velocity can be ordinary uphill walking. Reject
+        // upward impulses, not the component induced by the supporting slope.
+        if(d->vel.z+d->falling.z > 1)
+        {
+            if(d->floor.z < slopez || d->vel.z+d->falling.z >
+                max(-(d->vel.x*d->floor.x+d->vel.y*d->floor.y)/d->floor.z, 0.0f)+1.0f) return false;
+        }
+        vec old(d->o), horizontal(dir.x, dir.y, 0), stand, support;
+        if(horizontal.squaredlen() <= 1e-8f) return false;
+        float rise = min(maxrise*d->curscale, min(stairheight, csgopenstepheight*d->curscale));
+        if(rise <= 0 || !traversestand(d, vec(old).add(horizontal), rise, stand, support, true, slopez)) return false;
+        vec raised(old.x, old.y, stand.z);
+        if(!cleartraversepath(d, old, raised) || !cleartraversepath(d, raised, stand)) return false;
+        d->o = stand;
+        d->floor = support;
+        d->physstate = support.z >= floorz ? PHYS_FLOOR : PHYS_SLOPE;
+        d->falling = vec(0, 0, 0);
+        d->airmillis = 0;
+        return true;
+    }
+
     bool move(physent *d, vec &dir, bool local = false)
     {
         vec old(d->o), obstacle(0, 0, 0);
@@ -958,11 +987,12 @@ namespace physics
 
                 d->o = old;
                 bool lowledge = false;
-                // A grounded actor already following a slope should use the
-                // ordinary smooth ramp solver, not probe it as a new ledge.
+                // Grounded actors entering or following a walkable slope should
+                // try the tangent move before treating its facets as ledges.
                 bool smoothslope = csgopenmovement && ((gameent *)d)->actortype < A_ENEMY && !collideplayer
                     && d->physstate >= PHYS_SLOPE && d->physstate <= PHYS_STEP_DOWN && !liquidcheck(d) && !laddercheck(d)
-                    && d->floor.z >= slopez && d->floor.z < 1.0f && obstacle.z >= slopez;
+                    && d->floor.z >= slopez && obstacle.z >= slopez
+                    && (d->floor.z < 1.0f || obstacle.z < 1.0f);
                 if(smoothslope && !collideplayer)
                 {
                     vec rampdir(dir);
@@ -985,9 +1015,14 @@ namespace physics
                     d->o = old;
                 }
                 if(!smoothslope && !collideplayer && trytraverse((gameent *)d, dir, local, lowledge)) return true;
+                if(!collideplayer && tryseamstep((gameent *)d, dir, stairheight)) return true;
                 d->o.z -= stairheight;
                 d->zmargin = -stairheight;
-                if((!csgopenmovement || ((gameent *)d)->actortype >= A_ENEMY || lowledge || smoothslope) &&
+                // Adjacent triangle carriers can reject the traverse probe at
+                // a shared edge. Keep the native bounded step fallback when
+                // already supported by a flat floor, before sliding to a stop.
+                bool flatstep = csgopenmovement && d->floor.z >= floorz && obstacle.z >= 0;
+                if((!csgopenmovement || ((gameent *)d)->actortype >= A_ENEMY || lowledge || smoothslope || flatstep) &&
                     (d->physstate == PHYS_SLOPE || d->physstate == PHYS_FLOOR || (collide(d, vec(0, 0, -1), slopez) && (d->physstate == PHYS_STEP_UP || d->physstate == PHYS_STEP_DOWN || collidewall.z >= floorz))))
                 {
                     d->o = old;
@@ -1468,8 +1503,16 @@ namespace physics
                     {
                         if(laddercheck(d))
                         {
-                            m.z = m.iszero() ? 1 : m.z + 1;
-                            m.normalize();
+                            if(csgopenmovement)
+                            {
+                                // Ascend outside roof overhangs before walking
+                                // onto the landing; backward input descends.
+                                if(isladder(lookupmaterial(vec(d->feetpos()).add(vec(0, 0, 2*d->radius)))))
+                                    vecfromyawpitch(d->yaw, 0, 0, d->strafe, m);
+                                m.z = d->move;
+                            }
+                            else m.z = m.iszero() ? 1 : m.z + 1;
+                            if(!m.iszero()) m.normalize();
                         }
                         else if(!sticktospecial(e) && e->physstate >= PHYS_SLOPE)
                         { // move up or down slopes in air but only move up slopes in liquid

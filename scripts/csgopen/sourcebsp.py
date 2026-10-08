@@ -61,6 +61,7 @@ SURF_NODRAW = 0x0080
 CONTENTS_SOLID = 0x00000001
 CONTENTS_WATER = 0x00000020
 CONTENTS_PLAYERCLIP = 0x00010000
+CONTENTS_LADDER = 0x20000000
 SOURCE_TOOL_PREFIX = "tools/"
 TRIANGLES_PER_MESH = 100
 COLLISION_TRIANGLES_PER_MESH = 1000
@@ -459,21 +460,9 @@ class SourceBsp:
         for face in displacement_faces:
             displacement_polygons[face.plane].append(self._face_polygon(face))
         output = []
-        for brush_index in self.model_brushes[0]:
-            brush = self.brushes[brush_index]
-            if not brush.contents & (CONTENTS_SOLID | CONTENTS_PLAYERCLIP):
-                continue
-            for points in _brush_triangles(
-                brush, self.brushsides, self.planes, skip_polygons=displacement_polygons
-            ):
-                center = tuple(sum(point[axis] for point in points) / 3.0 for axis in range(3))
-                if bounds and any(
-                    center[axis] < bounds[0][axis] - 1.0
-                    or center[axis] > bounds[1][axis] + 1.0
-                    for axis in range(3)
-                ):
-                    continue
-                output.append(Triangle("collision/brush", points, ((0.0, 0.0),) * 3))
+        brushes = [self.brushes[index] for index in self.model_brushes[0]]
+        for points in _exposed_brush_triangles(brushes, self.brushsides, self.planes, bounds, displacement_polygons):
+            output.append(Triangle("collision/brush", points, ((0.0, 0.0),) * 3))
 
         # Displacements replace their source brush face with deformed terrain;
         # retain those triangles so slopes follow the compiled map exactly.
@@ -484,6 +473,29 @@ class SourceBsp:
                 for axis in range(3)
             ):
                 output.append(triangle)
+        return output
+
+    def playable_ladder_volumes(self) -> list[MaterialVolume]:
+        """Preserve authored ladder triggers without adding collision geometry."""
+        bounds = self.playable_bounds()
+        output = []
+        for brush in self.brushes:
+            if not brush.contents & CONTENTS_LADDER:
+                continue
+            points = [p for t in _brush_triangles(brush, self.brushsides, self.planes) for p in t]
+            if not points:
+                continue
+            minimum = tuple(min(p[a] for p in points) for a in range(3))
+            maximum = tuple(max(p[a] for p in points) for a in range(3))
+            if bounds and any((minimum[a] + maximum[a])/2 < bounds[0][a] - 1 or
+                              (minimum[a] + maximum[a])/2 > bounds[1][a] + 1 for a in range(3)):
+                continue
+            # The engine samples the actor's centre, whereas Source touches a
+            # ladder with its hull. Allow contact before the visible rungs.
+            # Upper clearance keeps the actor on the ladder until its feet
+            # can clear a roof lip; the TDM motor resumes forward motion there.
+            output.append(MaterialVolume(tuple(v - (16 if a < 2 else 0) for a, v in enumerate(minimum)),
+                                         tuple(v + (16 if a < 2 else 2 * SOURCE_STAIR_HEIGHT) for a, v in enumerate(maximum))))
         return output
 
     def playable_water_volumes(self) -> list[MaterialVolume]:
@@ -681,6 +693,7 @@ def write_eclipse_stage(
     collision_source = bsp.playable_collision_triangles(displacement_lod)
     neutral_backing = bsp.neutral_backing_triangles() if include_neutral_backing else []
     water_volumes = bsp.playable_water_volumes()
+    ladder_volumes = bsp.playable_ladder_volumes()
     stem = source.stem
     model_rel = Path("csgopen") / "imported" / stem
     model_dir = stage / "data" / model_rel
@@ -818,6 +831,7 @@ def write_eclipse_stage(
         f"        newmap {world_scale} {stem}",
         "        mapmodelreset 0",
         f'        exec "maps/{stem}.cfg"',
+        f"        stairheight {SOURCE_STAIR_HEIGHT * scale:.9g}",
     ]
     water_selections = [
         _material_selection(volume, scale, offset, 8) for volume in water_volumes
@@ -827,6 +841,9 @@ def write_eclipse_stage(
             "        editmatbox water %d %d %d %d %d %d %d"
             % (*origin, *size, grid)
         )
+    ladder_selections = [_material_selection(v, scale, offset, 1) for v in ladder_volumes]
+    for origin, size, grid in ladder_selections:
+        commands.append("        editmatbox ladder %d %d %d %d %d %d %d" % (*origin, *size, grid))
     for model_index in range(len(render_models) + len(collision_models)):
         _append_positioned_entity(
             commands, f"newent mapmodel {model_index} 0 0 0 100 100", offset
@@ -895,6 +912,7 @@ def write_eclipse_stage(
             "selections": len(water_selections),
             "grid": 8,
         },
+        "ladders": {"brushes": len(ladder_volumes), "selections": len(ladder_selections), "grid": 1},
         "neutral_backing": {"enabled": include_neutral_backing, **fallback_stats},
         "static_props": (prop_manifest or {}).get("counts"),
         "spawns_written": len(spawn_entries),
@@ -1251,6 +1269,66 @@ def _model_brush_indices(
     if any(index >= brush_count for index in result):
         raise SourceBspError(f"{source_name}: invalid brush index in model tree")
     return tuple(sorted(result))
+
+
+def _exposed_brush_triangles(brushes, brushsides, planes, bounds=None, skip_polygons=None):
+    """Remove hidden brush faces and the sides of small authored walking ramps."""
+    # Pure player-clip ramps are walking aids over the visible stair structure,
+    # not solid walls. Keep their support surface, while solid and vertical clip
+    # barriers retain exterior faces. Never split triangles or raise the budget.
+    records = []
+    buckets = defaultdict(list)
+    cell = 256.0
+    for brush in brushes:
+        if not brush.contents & (CONTENTS_SOLID | CONTENTS_PLAYERCLIP):
+            continue
+        triangles = _brush_triangles(brush, brushsides, planes, skip_polygons=skip_polygons)
+        if not triangles:
+            continue
+        points = [p for t in triangles for p in t]
+        low = tuple(min(p[i] for p in points) for i in range(3))
+        high = tuple(max(p[i] for p in points) for i in range(3))
+        selected = brushsides[brush.first_side:brush.first_side+brush.side_count]
+        hull = [planes[side.plane] for side in selected]
+        ramp = not brush.contents & CONTENTS_SOLID and all(high[i]-low[i] <= 256 for i in range(3)) and any(
+            not side.bevel and 0.7 <= plane.normal[2] < 0.999 for side, plane in zip(selected, hull))
+        index = len(records)
+        records.append((triangles, low, high, hull, ramp))
+        x0, y0 = low[:2]
+        x1, y1 = high[:2]
+        if bounds:
+            x0, y0 = max(x0, bounds[0][0]), max(y0, bounds[0][1])
+            x1, y1 = min(x1, bounds[1][0]), min(y1, bounds[1][1])
+        for x in range(math.floor(x0/cell), math.floor(x1/cell)+1):
+            for y in range(math.floor(y0/cell), math.floor(y1/cell)+1):
+                buckets[x, y].append(index)
+    output = []
+    for index, (triangles, _low, _high, _hull, ramp) in enumerate(records):
+        for triangle in triangles:
+            center = tuple(sum(p[i] for p in triangle)/3 for i in range(3))
+            if bounds and any(center[i] < bounds[0][i]-1 or center[i] > bounds[1][i]+1 for i in range(3)):
+                continue
+            normal = _normalize(_cross(_sub(triangle[1], triangle[0]), _sub(triangle[2], triangle[0])))
+            if ramp and normal[2] < 0.7:
+                continue
+            probe = tuple(center[i]+normal[i]*0.1 for i in range(3))
+            low = tuple(min(p[i] for p in triangle) for i in range(3))
+            high = tuple(max(p[i] for p in triangle) for i in range(3))
+            covered = False
+            for other in buckets.get((math.floor(center[0]/cell), math.floor(center[1]/cell)), ()):
+                if other == index:
+                    continue
+                _triangles, minimum, maximum, hull, _ramp = records[other]
+                if any(low[i] < minimum[i]-0.05 or high[i] > maximum[i]+0.05 for i in range(3)):
+                    continue
+                if all(_dot(plane.normal, probe) <= plane.distance+0.05 for plane in hull) and all(
+                    _dot(plane.normal, point) <= plane.distance+0.05 for point in triangle for plane in hull
+                ):
+                    covered = True
+                    break
+            if not covered:
+                output.append(triangle)
+    return output
 
 
 def _brush_triangles(

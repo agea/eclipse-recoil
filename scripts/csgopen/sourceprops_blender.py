@@ -27,11 +27,319 @@ from mathutils import Matrix, Vector
 MAX_TRIANGLES_PER_MODEL = 12_000
 PROP_TILE_SIZE = 1024.0
 
+# Map units: below crouched body clearance, or narrower than the player.
+SMOOTH_PROP_HEIGHT = 10.0
+SMOOTH_PROP_WIDTH = 8.0
+PASSAGE_PROP_WORDS = ("arch", "door", "window", "gate", "fence", "railing", "stairs",
+                      "ladder", "scaffold", "platform", "roof", "wall", "floor",
+                      "bridge", "tunnel", "building", "autocombine", "shelves")
+
+
+def _smooth_collision_allowed(model: str, geometry: ModelGeometry, scale: float, angles=(0.0, 0.0, 0.0)) -> bool:
+    """Only close cavities too small to contain a crouched player passage.
+
+    Architectural frames stay exact even when thin. Evaluate instance scale,
+    rather than assuming every instance uses the default Source model size.
+    """
+    name = Path(model.replace("\\", "/")).stem.lower()
+    if any(word in name for word in PASSAGE_PROP_WORDS):
+        return False
+    points = [p for t in geometry.triangles for p in t.points]
+    if not points:
+        return False
+    low = [min(p[i] for p in points) for i in range(3)]
+    high = [max(p[i] for p in points) for i in range(3)]
+    matrix = _source_matrix(angles)
+    corners = [matrix @ Vector((x, y, z)) for x in (low[0], high[0]) for y in (low[1], high[1]) for z in (low[2], high[2])]
+    spans = [(max(p[i] for p in corners) - min(p[i] for p in corners)) * abs(scale) for i in range(3)]
+    return spans[2] < SMOOTH_PROP_HEIGHT or max(spans[:2]) < SMOOTH_PROP_WIDTH
+
+
+def _smooth_collision(geometry: ModelGeometry) -> ModelGeometry:
+    """Fill small concavities without adding collision faces or render geometry."""
+    try:
+        candidate = _convex_collision(geometry)
+    except ValueError:
+        return geometry
+    return candidate if len(candidate.triangles) < len(geometry.triangles) else geometry
+
+
+def _window_frame_collision(model: str, geometry: ModelGeometry) -> ModelGeometry:
+    """Keep reviewed House window openings clear of decimated trim faces."""
+    frames = {"models/props/de_house/windowframe_54x76.mdl": (1, 87, 8, 80),
+              "models/props/de_house/windowframe_54x44.mdl": (0, 54, 7, 47)}
+    limits = frames.get(model.replace("\\", "/").lower())
+    if limits is None or len(geometry.triangles) < 48:
+        return geometry
+    points = [p for t in geometry.triangles for p in t.points]
+    low = tuple(min(p[a] for p in points) for a in range(3))
+    high = tuple(max(p[a] for p in points) for a in range(3))
+    bottom, top, sill, lintel = limits
+    if low[0] < -10.1 or high[0] > 10.1 or abs(low[1]+32) > .1 or abs(high[1]-32) > .1 or abs(low[2]-bottom) > .1 or abs(high[2]-top) > .1:
+        return geometry
+    output = []
+    for ymin, ymax, zmin, zmax in [(-32, -25, sill, lintel), (25, 32, sill, lintel),
+                                   (-32, 32, bottom, sill), (-32, 32, lintel, top)]:
+        vertices = [(x, y, z) for z in (zmin, zmax) for y in (ymin, ymax) for x in (low[0], high[0])]
+        quads = ((4, 5, 7, 6), (0, 2, 3, 1), (0, 1, 5, 4),
+                 (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5))
+        output.extend(LocalTriangle("collision", tuple(vertices[i] for i in indices), ((0, 0),)*3)
+                      for q in quads for indices in (q[:3], (q[0], q[2], q[3])))
+    return ModelGeometry(output)
+
+
+def _modular_stair_collision(model: str, geometry: ModelGeometry) -> ModelGeometry:
+    """Continuous walking surfaces for the reviewed Vertigo stair modules."""
+    name = model.replace("\\", "/").lower()
+    modules = {
+        "models/props/de_vertigo/step_64x32.mdl": (-64.0, 3.0, 35.0),
+        "models/props/de_vertigo/topstep_16x8.mdl": (-24.32, 3.0, 3.0),
+    }
+    if name not in modules or len(geometry.triangles) < 12:
+        return geometry
+    back, front_z, back_z = modules[name]
+    points = [p for t in geometry.triangles for p in t.points]
+    low = tuple(min(p[i] for p in points) for i in range(3))
+    high = tuple(max(p[i] for p in points) for i in range(3))
+    # Reject unexpected variants or scales baked into the mesh. Small floating
+    # point differences in the imported nominal dimensions are harmless.
+    if abs(low[0]+64) > 0.1 or abs(high[0]-64) > 0.1 or abs(low[1]-back) > 0.1 or abs(high[1]) > 0.1:
+        return geometry
+    if low[2] >= front_z or high[2] < max(front_z, back_z):
+        return geometry
+    vertices = [(-64, 0, low[2]), (64, 0, low[2]), (-64, back, low[2]), (64, back, low[2]),
+                (-64, 0, front_z), (64, 0, front_z), (-64, back, back_z), (64, back, back_z)]
+    quads = ((4, 6, 7, 5), (0, 4, 5, 1), (0, 1, 3, 2),
+             (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3))
+    return ModelGeometry([LocalTriangle("collision", tuple(vertices[i] for i in indices), ((0.0, 0.0),)*3)
+                          for q in quads for indices in (q[:3], (q[0], q[2], q[3]))])
+
+
+def _stair_collision_override(model: str, geometry: ModelGeometry) -> ModelGeometry:
+    """Use reviewed continuous surfaces without increasing collision budgets."""
+    candidate = _modular_stair_collision(model, geometry)
+    if candidate is not geometry:
+        return candidate
+    if model.replace("\\", "/").lower() != "models/props/de_dust/hr_dust/dust_trims/dust_kasbah_stairs002.mdl":
+        return geometry
+    path = Path(__file__).with_name("collision-overrides") / "dust_kasbah_stairs002.json"
+    triangles = json.loads(path.read_text())["triangles"]
+    candidate = ModelGeometry([LocalTriangle("collision", tuple(tuple(p) for p in t), ((0.0, 0.0),)*3) for t in triangles])
+    return candidate if len(candidate.triangles) <= len(geometry.triangles) else geometry
+
+
+def _regular_stair_shape(model: str, original: ModelGeometry) -> bool:
+    """Identify low rectangular stair flights without enclosing passages."""
+    name = Path(model.replace("\\", "/")).stem.lower()
+    if "stair" not in name or any(word in name for word in ("autocombine", "arch", "door", "window", "railing", "building")):
+        return False
+    levels = defaultdict(list)
+    for triangle in original.triangles:
+        a, b, c = (Vector(p) for p in triangle.points)
+        normal = (b-a).cross(c-a)
+        if normal.length and normal.normalized().z > 0.995:
+            levels[round((a.z+b.z+c.z)/3)].extend(triangle.points)
+    if len(levels) < 3 or len(levels) > 8:
+        return False
+    heights = sorted(levels)
+    rises = [b-a for a, b in zip(heights, heights[1:])]
+    if min(rises) < 4 or max(rises) > 20 or max(rises)-min(rises) > 1:
+        return False
+    centers = [tuple(sum(p[i] for p in levels[h])/len(levels[h]) for i in range(2)) for h in heights]
+    run = max(range(2), key=lambda i: abs(centers[-1][i]-centers[0][i]))
+    width = 1-run
+    points = [p for t in original.triangles for p in t.points]
+    low = tuple(min(p[i] for p in points) for i in range(3))
+    high = tuple(max(p[i] for p in points) for i in range(3))
+    span = high[width]-low[width]
+    # Reject curved, tapered or architectural stairs instead of filling passages.
+    if span < 64 or high[2]-low[2] > 64 or any(
+        max(p[width] for p in levels[h])-min(p[width] for p in levels[h]) < span*0.9 for h in heights):
+        return False
+    sign = 1 if centers[0][run] > centers[-1][run] else -1
+    front = max(sign*p[run] for p in points)
+    upper = max(sign*p[run] for p in levels[heights[-1]])
+    if front-upper <= 0 or (heights[-1]-heights[0])/(front-upper) > 1:
+        return False
+    return True
+
+
+def _stair_world_collision(prop, original: ModelGeometry, fallback: ModelGeometry, world) -> ModelGeometry:
+    """Use authored walking surfaces only when they cover the complete flight."""
+    if not _regular_stair_shape(prop.model, original):
+        return fallback
+    import sourcebsp
+    transform = _source_matrix(prop.angles)
+    samples = []
+    for triangle in original.triangles:
+        a, b, c = (Vector(p) for p in triangle.points)
+        normal = (b-a).cross(c-a)
+        if not normal.length or normal.normalized().z < 0.995:
+            continue
+        points = _transform(triangle, prop, transform)
+        center = tuple(sum(p[i] for p in points)/3 for i in range(3))
+        samples.append(center)
+        samples.extend(tuple(center[i]*0.4+p[i]*0.6 for i in range(3)) for p in points)
+    if not samples:
+        return fallback
+    low = tuple(min(p[i] for p in samples) for i in range(2))
+    high = tuple(max(p[i] for p in samples) for i in range(2))
+    nearby = [t.points for t in world if all(max(p[i] for p in t.points) >= low[i]-1 and
+              min(p[i] for p in t.points) <= high[i]+1 for i in range(2)) and
+              sourcebsp._normalize(sourcebsp._cross(sourcebsp._sub(t.points[1], t.points[0]),
+                                   sourcebsp._sub(t.points[2], t.points[0])))[2] >= 0.7]
+    for p in samples:
+        support = sourcebsp._support_floor((p[0], p[1], p[2]+0.1), nearby)
+        if support is None or not -1 <= support-p[2] <= 8:
+            return fallback
+    return ModelGeometry([])
+
+
+def _paired_door_collision(model: str, original: ModelGeometry, fallback: ModelGeometry) -> ModelGeometry:
+    """Flatten each Long A door leaf separately, preserving the opening."""
+    if model.replace("\\", "/").lower() != "models/props/de_dust/hr_dust/dust_doors/dust_door_long_doors_01.mdl":
+        return fallback
+    leaves = [[], []]
+    for triangle in original.triangles:
+        low, high = min(p[0] for p in triangle.points), max(p[0] for p in triangle.points)
+        if low <= 0 <= high:
+            return fallback
+        leaves[0 if high < 0 else 1].append(triangle)
+    if not all(leaves):
+        return fallback
+    try:
+        candidate = ModelGeometry([t for leaf in leaves for t in _convex_collision(ModelGeometry(leaf)).triangles])
+    except ValueError:
+        return fallback
+    return candidate if len(candidate.triangles) <= len(fallback.triangles) else fallback
+
 
 def _continuous_collision(model: str) -> bool:
     """Only fill cavities on logs and timber piles, never architectural props."""
     name = Path(model.replace("\\", "/")).stem.lower()
-    return name.startswith(("fallentree_", "log_", "logs_", "logpile_", "woodpile_", "lumberpile_", "construction_stack_"))
+    return name.startswith(("fallentree_", "log_", "logs_", "logpile_", "woodpile_", "lumberpile_", "construction_stack_", "construction_wood_2x4_"))
+
+
+def _pile_collision(geometry: ModelGeometry) -> ModelGeometry:
+    """Use twelve flat faces for bundled boards, preserving local outer bounds.
+
+    Bounding in model space preserves instance rotation. Small board bevels and
+    slots should not become footholds that catch a player's capsule.
+    """
+    points = [point for triangle in geometry.triangles for point in triangle.points]
+    low = tuple(min(point[i] for point in points) for i in range(3))
+    high = tuple(max(point[i] for point in points) for i in range(3))
+    corners = [(x, y, z) for x in (low[0], high[0]) for y in (low[1], high[1]) for z in (low[2], high[2])]
+    return _convex_collision(ModelGeometry([
+        LocalTriangle("collision", tuple(corners[i] for i in indices), ((0.0, 0.0),) * 3)
+        for indices in ((0, 1, 2), (3, 4, 5), (6, 7, 0))
+    ]))
+
+
+def _sectioned_collision(model: str) -> bool:
+    """The curved wooden bench needs smooth supports without filling its frame."""
+    return model.replace("\\", "/").lower() == "models/props/de_inferno/bench_wood.mdl"
+
+
+def _split_support_collision(triangles: list[LocalTriangle], height: float, lower_only: bool = False) -> ModelGeometry:
+    """Flat lower support and a separate hull following the inclined back."""
+    sections = [[], []]
+    for triangle in triangles:
+        for side, sign in enumerate((-1, 1)):
+            if any(sign * (p[2] - height) > 1e-5 for p in triangle.points):
+                sections[side].extend(p for p in triangle.points if sign * (p[2] - height) >= -1e-5)
+        for i in range(3):
+            a, b = triangle.points[i], triangle.points[(i + 1) % 3]
+            if (a[2] - height) * (b[2] - height) < 0:
+                ratio = (height - a[2]) / (b[2] - a[2])
+                point = tuple(a[j] + ratio * (b[j] - a[j]) for j in range(3))
+                sections[0].append(point)
+                sections[1].append(point)
+    output = []
+    for side, section in enumerate(sections):
+        if lower_only and side:
+            continue
+        if len(section) < 4:
+            continue
+        geometry = ModelGeometry([
+            LocalTriangle("collision", tuple(section[i:i + 3]), ((0.0, 0.0),) * 3)
+            for i in range(0, len(section) - 2, 3)
+        ])
+        # Include every extreme point even when the point count is not a multiple of three.
+        geometry.triangles.append(LocalTriangle("collision", (section[-1], section[-2], section[0]), ((0.0, 0.0),) * 3))
+        output.extend((_pile_collision(geometry) if side == 0 else _convex_collision(geometry)).triangles)
+    return ModelGeometry(output)
+
+
+def _component_collision(geometry: ModelGeometry, bridge_slats: bool = False) -> ModelGeometry:
+    """Smooth bench slats with flat, separate lower/back supports."""
+    parents = list(range(len(geometry.triangles)))
+
+    def find(index):
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    owners = {}
+    for index, triangle in enumerate(geometry.triangles):
+        for point in triangle.points:
+            # Weld material/UV seams at sub-millimetre Source precision.
+            key = tuple(round(value, 3) for value in point)
+            if key in owners:
+                parents[find(index)] = find(owners[key])
+            else:
+                owners[key] = index
+    groups = defaultdict(list)
+    for index, triangle in enumerate(geometry.triangles):
+        groups[find(index)].append(triangle)
+    sections = []
+    slats = []
+    seat_slats = []
+    back_slats = []
+    top = max(point[2] for triangle in geometry.triangles for point in triangle.points)
+    for triangles in groups.values():
+        points = [point for triangle in triangles for point in triangle.points]
+        spans = sorted(max(point[i] for point in points) - min(point[i] for point in points) for i in range(3))
+        if bridge_slats and spans[2] > 4 * spans[1]:
+            slats.extend(triangles)
+            if sum(p[2] for p in points) / len(points) < top * 0.6:
+                seat_slats.extend(triangles)
+            else:
+                back_slats.extend(triangles)
+        else:
+            sections.append(triangles)
+    if bridge_slats and seat_slats and back_slats:
+        height = max(p[2] for t in seat_slats for p in t.points)
+        output = list(_pile_collision(ModelGeometry(seat_slats)).triangles)
+        # Join the back directly to the seat, without a thin slot at the seam.
+        back = list(back_slats)
+        back.extend(LocalTriangle("collision", tuple((p[0], p[1], height) for p in t.points), t.uvs) for t in back_slats)
+        output.extend(_pile_collision(ModelGeometry(back)).triangles)
+        for triangles in sections:
+            output.extend(_split_support_collision(triangles, height, lower_only=True).triangles)
+        return ModelGeometry(output)
+    if slats:
+        # Smooth the seat/back as one surface; only narrow support frames
+        # extend below it, preserving the space between the supports.
+        sections.append(slats)
+    output = []
+    for triangles in sections:
+        if bridge_slats and triangles is not slats:
+            if seat_slats:
+                height = max(p[2] for t in seat_slats for p in t.points)
+                output.extend(_split_support_collision(triangles, height).triangles)
+            else:
+                output.extend(triangles)
+            continue
+        try:
+            hull = _convex_collision(ModelGeometry(triangles))
+        except ValueError:
+            # Planar details cannot form a closed volume; retain those faces.
+            output.extend(triangles)
+        else:
+            output.extend(hull.triangles if len(hull.triangles) <= len(triangles) else triangles)
+    return ModelGeometry(output)
 
 
 def _convex_collision(geometry: ModelGeometry) -> ModelGeometry:
@@ -411,8 +719,14 @@ def main() -> int:
             args.scale,
         )
         geometry_cache = {}
+        stair_original_cache = {}
+        stair_world = None
         collision_cache = {}
+        sectioned_cache = {}
         continuous_props = 0
+        sectioned_props = 0
+        smooth_props = 0
+        smooth_cache = {}
         written_props = 0
         solid_props = 0
         for number, prop in enumerate(props, 1):
@@ -428,12 +742,43 @@ def main() -> int:
                     prop.model.lower() in structural_models,
                 )
             geometry = geometry_cache[prop.model.lower()]
-            collision = geometry
-            if prop.solid and _continuous_collision(prop.model):
+            collision = _window_frame_collision(prop.model, _stair_collision_override(prop.model, geometry)) if prop.solid else geometry
+            if prop.solid and "stair" in Path(prop.model).stem.lower() and collision is geometry:
+                if prop.model.lower() not in stair_original_cache:
+                    stair_original_cache[prop.model.lower()] = _geometry(item[0], 1.0, True)
+                original = stair_original_cache[prop.model.lower()]
+                if _regular_stair_shape(prop.model, original):
+                    if stair_world is None:
+                        stair_world = bsp.playable_collision_triangles(2)
+                    collision = _stair_world_collision(prop, original, geometry, stair_world)
+            if prop.solid and prop.model.lower() == "models/props/de_dust/hr_dust/dust_doors/dust_door_long_doors_01.mdl":
                 if prop.model.lower() not in collision_cache:
-                    collision_cache[prop.model.lower()] = _convex_collision(_geometry(item[0], 1.0, True))
+                    original = _geometry(item[0], 1.0, True)
+                    collision_cache[prop.model.lower()] = _paired_door_collision(prop.model, original, geometry)
+                collision = collision_cache[prop.model.lower()]
+            elif prop.solid and _continuous_collision(prop.model):
+                if prop.model.lower() not in collision_cache:
+                    original = _geometry(item[0], 1.0, True)
+                    name = Path(prop.model).stem.lower()
+                    collision_cache[prop.model.lower()] = (
+                        _pile_collision(original) if name.startswith(("construction_stack_", "construction_wood_2x4_"))
+                        else _convex_collision(original)
+                    )
                 collision = collision_cache[prop.model.lower()]
                 continuous_props += 1
+            elif prop.solid and _sectioned_collision(prop.model):
+                if prop.model.lower() not in sectioned_cache:
+                    candidate = _component_collision(geometry, bridge_slats=True)
+                    # Respect even unusually small user-supplied prop budgets.
+                    sectioned_cache[prop.model.lower()] = candidate if len(candidate.triangles) <= len(geometry.triangles) else geometry
+                collision = sectioned_cache[prop.model.lower()]
+                sectioned_props += 1
+            elif prop.solid and collision is geometry and _smooth_collision_allowed(prop.model, geometry, args.scale * prop.scale, prop.angles):
+                if prop.model.lower() not in smooth_cache:
+                    smooth_cache[prop.model.lower()] = _smooth_collision(geometry)
+                collision = smooth_cache[prop.model.lower()]
+                if collision is not geometry:
+                    smooth_props += 1
             transform = _source_matrix(prop.angles)
             tile = (math.floor(prop.origin[0] / PROP_TILE_SIZE), math.floor(prop.origin[1] / PROP_TILE_SIZE))
             for triangle in geometry.triangles:
@@ -482,6 +827,11 @@ def main() -> int:
             "solid_props": solid_props,
             "continuous_collision_props": continuous_props,
             "continuous_collision_models": sorted(collision_cache),
+            "sectioned_collision_props": sectioned_props,
+            "sectioned_collision_models": sorted(sectioned_cache),
+            "smooth_collision_props": smooth_props,
+            "smooth_collision_policy": "compact-world-bounds-v1",
+            "smooth_collision_models": sorted(smooth_cache),
             "collision_triangles": sum(part.triangles * 2 for part in collision_writer.parts),
             "collision_tile_models": len(collision_writer.parts),
             "simplification_ratio": ratio,
