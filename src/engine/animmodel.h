@@ -1,6 +1,8 @@
 #include <climits> // For INT_MAX
 
 VAR(IDF_PERSIST, fullbrightmodels, 0, 0, 200);
+FVAR(IDF_PERSIST, modelglowscale, 0, 1, 1);
+FVAR(IDF_PERSIST, modelfullbrightscale, 0, 1, 1);
 VAR(0, testtags, 0, 0, 1);
 VARF(0, dbgcolmesh, 0, 0, 1,
 {
@@ -245,8 +247,8 @@ struct animmodel : model
             if(patterned()) LOCALPARAMF(patternscale, patternscale);
             if(mixed()) LOCALPARAMF(mixerscale, mixerscale);
 
-            if(fullbright) LOCALPARAMF(fullbright, 0.0f, fullbright);
-            else LOCALPARAMF(fullbright, 1.0f, as->cur.anim&ANIM_FULLBRIGHT ? 0.5f*fullbrightmodels/100.0f : 0.0f);
+            if(fullbright && modelfullbrightscale > 0) LOCALPARAMF(fullbright, 0.0f, fullbright*modelfullbrightscale);
+            else LOCALPARAMF(fullbright, 1.0f, as->cur.anim&ANIM_FULLBRIGHT ? 0.5f*fullbrightmodels/100.0f*modelfullbrightscale : 0.0f);
 
             float curglow = glow;
             if(glowpulse > 0)
@@ -256,7 +258,7 @@ struct animmodel : model
                 curglow += glowdelta*2*fabs(curpulse - 0.5f);
             }
 
-            LOCALPARAMF(maskscale, spec, gloss, curglow);
+            LOCALPARAMF(maskscale, spec, gloss, curglow*modelglowscale);
             if(envmapped()) LOCALPARAMF(envmapscale, envmapmin-envmapmax, envmapmax);
         }
 

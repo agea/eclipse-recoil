@@ -563,6 +563,15 @@ fade, and has a **68-unit radius**. It persists after the thrower's death and
 clears on map reset. Bullets pass through the cloud. Bots cannot acquire sight
 through a dense cloud. Other player models, attachments and status effects
 are also hidden when the viewing line crosses dense smoke, for both teams.
+The TDM client disables model emission, model fullbright overrides and bloom
+through `modelglowscale 0`, `modelfullbrightscale 0` and `bloom 0`. Characters,
+weapons, attachments and model props use scene lighting without neon strips or
+bright fringes. Team colors and ordinary material reflections remain available.
+These client preferences require a rebuilt client; map packages and servers
+need no changes. The original profile retains both model scales at 1 and its
+existing bloom preference. Model props with authored emissive lights also lose
+their emission in TDM; world lighting and gameplay effects remain unchanged.
+
 Player halos are disabled in Eclipse Recoil. Labels above weapons, pickups and
 dropped loot are hidden; player labels are shown only for teammates.
 Teammate labels and player radar indicators require sight without a wall or

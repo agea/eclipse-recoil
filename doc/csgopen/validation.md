@@ -2882,3 +2882,38 @@ The native test covers each individual spawn with the SMG actor and actual
 collision handling, not a crowded multi-client respawn sequence. Restart the
 LAN server and reconnect clients to refresh the map package. No production
 binary rebuild is required; the ZIP remains a local ignored asset.
+
+
+### TDM models without neon emission (2026-10-09)
+
+The TDM client sets model emission and authored fullbright scales to zero,
+disables model fullbright enhancement, bloom and entity halos. Both new engine
+scales default to 1, preserving original-profile rendering and upstream assets.
+The bloom preference is reapplied after first-run graphics preset initialization.
+No gameplay rules, protocol or asset submodules change.
+
+Executed checks in `.csgopen/less-neon-20261009/`:
+
+- Production native client/server build passes (`../logs/less-neon-build.log`).
+- The canonical dedicated-loopback smoke reports `SMOKE_DONE FAILURES 0`
+  (`checks.log`, `smoke.log`), including the new visual settings across respawn
+  and map change. Its first run exposed graphics initialization restoring bloom;
+  the final named first-run callback fixes this. The initial inline callback
+  did not register because `onevent` expects an alias identifier.
+- A separate fresh profile reports `FIRST_RUN_VISUAL_PASS` (`first.log`,
+  `first-checks.log`), confirming emission, fullbright and bloom stay disabled
+  after first-run initialization.
+- `visual.log` confirms both engine scales start at 1 before the TDM client
+  preferences load and reports `LESS_NEON_VISUAL_DONE`. Screenshots
+  `visual-client/weapon-after.png`, `character-after.png` and
+  `character-before.png` were visually inspected. The same stationary player
+  loses the bright armor accents; the first-person SMG and arms use scene light.
+  The comparison toggles settings in one client, without editing assets.
+- `git diff --check` passes. Temporary test clients and loopback servers exit;
+  the live LAN server is unchanged.
+
+Rebuild and restart the client to apply these preferences. Servers and map
+packages need no update. The comparison covers the male player and SMG on Echo;
+other models and very dark maps remain manual visual checks. World-surface
+emission and ordinary firing, grenade and smoke effects are retained; disabling
+bloom removes post-processing fringes throughout the scene.
