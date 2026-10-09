@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--no-vote', action='store_true', help='exercise empty-ballot fallback')
+    parser.add_argument('--mid-match', action='store_true', help='exercise immediate solo majority while playing')
     args = parser.parse_args()
     state = ROOT / '.csgopen/votechoices-test'
     state.mkdir(parents=True, exist_ok=True)
@@ -26,6 +27,7 @@ def main():
     (server_profile / 'servinit.cfg').write_text(f'''exec "config/csgopen/tdm.cfg"
 exec "config/csgopen/server-maps.cfg"
 sv_mainmaps "echo dutility ennui park"
+sv_votestyle {3 if args.mid_match else 0}
 sv_timelimit 1
 sv_gamespeed 100
 sv_intermlimit 100
@@ -54,13 +56,21 @@ httpserver 0
     if args.no_vote:
         ballot = 'test_check (= (getvote -1) 0) empty_ballot'
         result = '(>= (indexof $test_choices (substr $mapname 5)) 0)'
+    if args.mid_match:
+        ballot = '''test_chosen = (at $votemaps 0)
+        start $mapname $gamemode $mutators
+        sleep 250 [
+            test_check (= (getvote -1) 0) current_map_rejected
+            sleep 2000 [start (concatword "maps/" $test_chosen) $gamemode $mutators]
+        ]'''
+        result = '(=s $mapname (concatword "maps/" $test_chosen))'
     (client_profile / 'autoexec.cfg').write_text(f'''exec "config/csgopen/client.cfg"
 showloadoutmenu 0
 name "Vote shortlist test"
 test_failures = 0
 test_check = [if (! $arg1) [test_failures = (+ $test_failures 1); echo (concat CHECK_FAIL $arg2)] [echo (concat CHECK_PASS $arg2)]]
 test_poll = [
-    if (= $gamestate $G_S_VOTING) [
+    if (= $gamestate ${'G_S_PLAYING' if args.mid_match else 'G_S_VOTING'}) [
         test_check (= (listlen $votemaps) 3) three_candidates
         test_choices = $votemaps
         test_check (< (indexof $votemaps (substr $mapname 5)) 0) excludes_current
@@ -74,7 +84,7 @@ test_poll = [
         sleep 7000 [
             echo (concat RESULT_MAP $mapname)
             test_check {result} selected_map_loaded
-            test_check (=s $votemaps "") shortlist_cleared
+            test_check {'(= (listlen $votemaps) 3)' if args.mid_match else '(=s $votemaps "")'} shortlist_next_round
             echo (concat VOTECHOICES_DONE FAILURES $test_failures)
             quit
         ]

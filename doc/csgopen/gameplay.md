@@ -9,6 +9,15 @@ native development server distributes complete converted-map ZIPs over
 loopback HTTP; the TDM client verifies and caches them before map loading.
 This does not change the movement, weapons, or original gameplay profile.
 
+During a match, the Vote Map/Mode panel also offers three random rotation
+maps. With `sv_votestyle 3`, choosing a preview votes to end the current match
+and load that map immediately. The same destination needs
+`floor(connected humans / 2) + 1` votes, including spectators and excluding
+bots. For example, two of three or three of four humans must agree. Players
+can change or cancel their vote; a departure recalculates the majority.
+At intermission, a fresh shortlist clears the earlier votes and the normal
+20-second ballot still runs to completion.
+
 Preset: `config/csgopen/tdm.cfg`. I nomi `sv_*` agiscono sull'autorità server;
 le corrispondenti variabili senza prefisso sono sincronizzate con i client.
 I valori sono un punto di partenza nelle unità di Red Eclipse, non valori CS:GO.
@@ -640,7 +649,7 @@ place their override after the preset in their server startup configuration.
 
 The CSGOpen TDM preset enables `sv_csgopenfalldamage 1` for humans and bots.
 The original profile defaults to zero. The server synchronizes the enable flag,
-`sv_csgopenfallspeed` (100 world units/second) and `sv_csgopenfallscale` (1 health
+`sv_csgopenfallspeed` (160 world units/second in TDM) and `sv_csgopenfallscale` (1 health
 point per excess world unit/second). These are prototype values, not a claim
 of matching Counter-Strike's damage curve.
 
@@ -655,9 +664,11 @@ disable environmental fall damage. Impact speed remains client reported, as
 with the existing client physics events; this is not server-side collision
 reconstruction or an anti-cheat system.
 
-At the default settings, speed 100 is harmless, 150 costs 50 health and 200
-costs 100 health. Natural movement may increase a seeded speed during its final
-physics step. Ground jumps and small steps stay below the threshold. Water or
+At the TDM settings, speed 160 is harmless, 210 costs 50 health and 260
+costs 100 health. The safe threshold was raised from 100 after a low-wall drop
+cost 15 health; that impact is now harmless. Natural movement may increase a
+seeded speed during its final physics step. Ground jumps and small steps stay
+below the threshold. Water or
 lava at at least half submersion suppresses this impact damage; existing lava
 and material damage remain active. Ladder attachment, floating, prediction of
 remote actors and automatic climbing do not send impact events. Each landing
@@ -694,3 +705,25 @@ kamikaze behavior remains available in the original profile.
 
 Protocol 285 adds the server-only drop event; update and restart clients and
 servers together. No converted-map packages need regeneration.
+
+
+### No map or player loot
+
+`sv_csgopennoloot 1` is enabled by the TDM preset and synchronized to clients.
+The original profile defaults to zero. The server's item eligibility check
+rejects every map weapon/ammunition pickup and despawns previously active map
+items during its next entity update. Shared use/drop checks and the server
+pickup handler reject map/dropped-item use and manual equipment drops.
+Inventory and prize drops cannot create loot on death or inventory reset.
+This applies to humans and bots on both native and converted maps.
+
+Client item eligibility hides map pickups in gameplay while retaining editor
+access. Any existing dropped-inventory model is hidden when the rule is enabled.
+Respawn loadouts, reserve ammunition and normal reloads are unchanged. The armed
+grenade release runs independently before ordinary inventory-drop suppression:
+HE, smoke and launcher rounds already in cook still fall and complete their fuse.
+They are live projectiles, never collectible equipment.
+
+Rebuild/update and restart clients and servers to use the rule; no map editing
+or conversion is necessary. The variable uses existing synchronization and does
+not change protocol 285.

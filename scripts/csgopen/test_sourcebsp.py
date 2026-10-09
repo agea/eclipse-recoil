@@ -447,6 +447,48 @@ class SourceBspTest(unittest.TestCase):
         self.assertEqual(dds[84:88], b"DXT1")
         self.assertEqual(len(dds), 136)
 
+    def test_terrain_alpha_is_not_surface_transparency(self):
+        materials = {
+            "materials/terrain.vmt": b'"WorldVertexTransition" { "$basetexture" "leaves" }',
+            "materials/patch.vmt": b'Patch { include "terrain" }',
+            "materials/tree.vmt": b'LightmappedGeneric { "$translucent" "1" }',
+            "materials/cycle.vmt": b'Patch { include "cycle" }',
+        }
+        with patch.object(sourcebsp.ContentStore, "read", side_effect=materials.get):
+            content = sourcebsp.ContentStore(b"", None)
+            for material in ("terrain", "patch", "materials/TERRAIN.vmt"):
+                self.assertTrue(sourcebsp._is_terrain_blend(content, material))
+            for material in ("tree", "cycle", "missing"):
+                self.assertFalse(sourcebsp._is_terrain_blend(content, material))
+
+    def test_model_reflection_and_tint_masks_keep_opaque_bodywork(self):
+        materials = {
+            "materials/truck.vmt": b'VertexLitGeneric { $basealphaenvmapmask 1 }',
+            "materials/tint.vmt": b'VertexLitGeneric { "$blendtintbybasealpha" "1" }',
+            "materials/glass.vmt": b'VertexLitGeneric { $basealphaenvmapmask 1 $translucent 1 }',
+            "materials/fence.vmt": b'VertexLitGeneric { $blendtintbybasealpha 1 $alphatest 1 }',
+            "materials/off.vmt": b'VertexLitGeneric { $basealphaenvmapmask 0 }',
+            "materials/patch.vmt": b'Patch { include "truck" }',
+            "materials/glasspatch.vmt": b'Patch { include "truck" insert { $translucent 1 } }',
+            "materials/cycle.vmt": b'Patch { include "cycle" }',
+        }
+        with patch.object(sourcebsp.ContentStore, "read", side_effect=materials.get):
+            content = sourcebsp.ContentStore(b"", None)
+            for material in ("truck", "tint", "patch", "materials/TRUCK.vmt"):
+                self.assertTrue(sourcebsp._has_opaque_alpha_mask(content, material))
+            for material in ("glass", "fence", "off", "glasspatch", "cycle", "missing"):
+                self.assertFalse(sourcebsp._has_opaque_alpha_mask(content, material))
+
+    def test_spawn_on_prop_keeps_authored_height_over_lower_world_floor(self):
+        def floor(z):
+            return [((0, 0, z), (128, 0, z), (0, 128, z))]
+        origin = (16, 16, 416.019)
+        self.assertEqual(sourcebsp._source_spawn_floor(origin, floor(400)), 400)
+        self.assertIsNone(sourcebsp._source_spawn_floor(origin, floor(256)))
+        self.assertIsNone(sourcebsp._source_spawn_floor(origin, []))
+        self.assertEqual(sourcebsp._source_spawn_floor((16, 16, 420), floor(400)), 400)
+        self.assertIsNone(sourcebsp._source_spawn_floor((16, 16, 420.01), floor(400)))
+
     def test_reads_vpk_directory_entry_and_validates_crc(self):
         payload = b"material"
         entry = struct.pack(

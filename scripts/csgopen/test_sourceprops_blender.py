@@ -2,6 +2,7 @@
 """Run with Blender --background --python scripts/csgopen/test_sourceprops_blender.py."""
 
 import sys
+import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
@@ -9,9 +10,20 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sourceprops_blender as props
+import sourcebsp
 
 
 class ContinuousCollisionTests(unittest.TestCase):
+    def test_opaque_body_mask_does_not_disable_glass_alpha_test(self):
+        with tempfile.TemporaryDirectory() as directory:
+            part = props.ObjPart(Path(directory), "tile", sealed=True,
+                                 bindings={"body__0": "body", "glass__0": "glass"})
+            part.close(sourcebsp, {"body": "body.dds", "glass": "glass.dds"}, 0.25, {"body"})
+            config = (Path(directory) / "obj.cfg").read_text()
+            self.assertIn('objalphatest "body__0" 0', config)
+            self.assertNotIn('objalphatest "glass__0"', config)
+            self.assertIn('objskin "glass__0" "../textures/glass.dds"', config)
+
     def test_window_frame_keeps_aperture_and_budget(self):
         triangle = props.LocalTriangle("solid", ((-10, -32, 1), (10, 32, 87), (10, -32, 1)), ((0, 0),)*3)
         original = props.ModelGeometry([triangle]*100)

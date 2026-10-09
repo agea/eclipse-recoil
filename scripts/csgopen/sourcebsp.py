@@ -729,8 +729,11 @@ def write_eclipse_stage(
             texture = texture_names.get(material)
             if texture:
                 texture_path = texture if index == 0 else f"../{texture}"
+                terrain_blend = _is_terrain_blend(content, material)
                 for mesh in meshes:
                     model_config.insert(1, f'objskin "{mesh}" "{texture_path}"')
+                    if terrain_blend:
+                        model_config.append(f'objalphatest "{mesh}" 0')
         (directory / "obj.cfg").write_text("\n".join(model_config) + "\n", encoding="utf-8")
         render_models.append(relative)
     render_stats["models"] = len(render_models)
@@ -861,7 +864,7 @@ def write_eclipse_stage(
     spawn_entries = []
     surface_points = [triangle.points for triangle in collision_source]
     for spawn in bsp.spawns():
-        floor_z = _support_floor(spawn.origin, surface_points)
+        floor_z = _source_spawn_floor(spawn.origin, surface_points)
         spawn_entries.append((spawn, floor_z))
     for spawn_id, (spawn, floor_z) in enumerate(spawn_entries):
         team = {"neutral": 0, "alpha": 1, "omega": 2}[spawn.team]
@@ -1091,6 +1094,55 @@ def _extract_materials(
             bindings[mesh] = filename
         resolved += 1
     return {"resolved": resolved, "missing": missing, "unsupported_format": unsupported}
+
+
+def _source_spawn_floor(
+    origin: tuple[float, float, float],
+    surface_points: Iterable[tuple[tuple[float, float, float], ...]],
+) -> float | None:
+    """Keep authored height when the nearby support is a static prop, not BSP."""
+    floor = _support_floor(origin, surface_points)
+    if floor is not None and origin[2] - floor <= SOURCE_STAIR_HEIGHT:
+        return floor
+    return None
+
+
+def _is_terrain_blend(content: ContentStore, material: str, active: set[str] | None = None) -> bool:
+    """Source terrain alpha controls texture blending, never surface coverage."""
+    normalized = material.lower().replace("\\", "/").removeprefix("materials/").removesuffix(".vmt")
+    active = set() if active is None else active
+    if normalized in active:
+        return False
+    active.add(normalized)
+    data = content.read(f"materials/{normalized}.vmt")
+    if data is None:
+        return False
+    text = re.sub(r"//[^\r\n]*", "", data.decode("utf-8", "replace"))
+    if re.match(r'\s*"?WorldVertexTransition"?\s*\{', text, re.I):
+        return True
+    include = re.search(r'"?include"?\s+"([^\"]+)"', text, re.I)
+    return _is_terrain_blend(content, include.group(1), active) if include else False
+
+
+def _has_opaque_alpha_mask(content: ContentStore, material: str, active: set[str] | None = None) -> bool:
+    """Reflection/tint masks must not punch holes in opaque Source models."""
+    normalized = material.lower().replace("\\", "/").removeprefix("materials/").removesuffix(".vmt")
+    active = set() if active is None else active
+    if normalized in active:
+        return False
+    active.add(normalized)
+    data = content.read(f"materials/{normalized}.vmt")
+    if data is None:
+        return False
+    text = re.sub(r"//[^\r\n]*", "", data.decode("utf-8", "replace"))
+    def enabled(name: str) -> bool:
+        return bool(re.search(r'"?\$' + name + r'"?\s+"?1(?:\.0*)?"?(?=\s|[{}]|$)', text, re.I))
+    if enabled("translucent") or enabled("alphatest"):
+        return False
+    if enabled("basealphaenvmapmask") or enabled("blendtintbybasealpha"):
+        return True
+    include = re.search(r'"?include"?\s+"([^\"]+)"', text, re.I)
+    return _has_opaque_alpha_mask(content, include.group(1), active) if include else False
 
 
 def _resolve_base_texture(

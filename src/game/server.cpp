@@ -664,6 +664,7 @@ namespace server
 
     bool dropweapon(clientinfo *ci, int flags, int weap, vector<droplist> &drop)
     {
+        if(G(csgopennoloot)) return false;
         if(!isweap(weap) || weap == m_weapon(ci->actortype, gamemode, mutators)) return false;
         if(!ci->hasweap(weap, m_weapon(ci->actortype, gamemode, mutators))) return false;
         if(!m_classic(gamemode, mutators) && !W2(weap, ammosub, false) && !W2(weap, ammosub, true)) return false;
@@ -781,7 +782,7 @@ namespace server
             else loopi(W_ALL) dropweapon(ci, flags, i, drop);
         }
 
-        if(flags&DROP_PRIZE && ci->hasprize)
+        if(!G(csgopennoloot) && flags&DROP_PRIZE && ci->hasprize)
         {
             int weap = ci->hasprize > 0 ? W_PRIZE + ci->hasprize - 1 : W_PRIZE,
                 ent = virtweapent(weap);
@@ -2232,6 +2233,7 @@ namespace server
 
     bool hasitem(int i, bool item = true)
     {
+        if(G(csgopennoloot)) return false;
         if((m_speedrun(gamemode) && !m_sr_gauntlet(gamemode, mutators)) || !sents.inrange(i) || sents[i].type != WEAPON) return false;
         if(!servermapvariant(sents[i].attrs[enttype[sents[i].type].mvattr]) || !checktrigid(i) || !m_check(sents[i].attrs[2], sents[i].attrs[3], gamemode, mutators)) return false;
         int attr = m_attr(sents[i].type, sents[i].attrs[0]);
@@ -2938,17 +2940,18 @@ namespace server
     {
         shouldcheckvotes = false;
         int style = gamestate == G_S_VOTING ? G(voteinterm) : G(votestyle);
-        if(style == 3 && !force) return false;
+        bool majority = gamestate != G_S_VOTING && style == 3;
+        if(!force && ((majority && !gs_playing(gamestate)) || (!majority && style == 3))) return false;
         vector<votecount> votes;
         int maxvotes = 0;
         loopv(clients)
         {
             clientinfo *oi = clients[i];
             if(oi->actortype > A_PLAYER) continue;
-            if(G(votefilter) && !gs_waiting(gamestate) && oi->state == CS_SPECTATOR && !*oi->mapvote) continue; // filter out spectators who haven't voted
+            if(!majority && G(votefilter) && !gs_waiting(gamestate) && oi->state == CS_SPECTATOR && !*oi->mapvote) continue; // filter out spectators who haven't voted
             maxvotes++;
             if(!*oi->mapvote) continue;
-            if(style == 3) votes.add(votecount(oi->mapvote, oi->modevote, oi->mutsvote, oi->clientnum));
+            if(style == 3 && !majority) votes.add(votecount(oi->mapvote, oi->modevote, oi->mutsvote, oi->clientnum));
             else
             {
                 votecount *vc = NULL;
@@ -2964,7 +2967,7 @@ namespace server
 
         votecount *best = NULL;
         bool passed = force;
-        if(style == 3) best = !votes.empty() ? &votes[rnd(votes.length())] : NULL;
+        if(style == 3 && !majority) best = !votes.empty() ? &votes[rnd(votes.length())] : NULL;
         else
         {
             int morethanone = 0;
@@ -2985,6 +2988,7 @@ namespace server
             }
             if(!passed && best) switch(style)
             {
+                case 3: passed = best->count > maxvotes/2; break;
                 case 2: passed = best->count >= maxvotes; break;
                 case 1: passed = best->count >= maxvotes*G(votethreshold); break;
                 case 0: default: break;
@@ -3043,10 +3047,10 @@ namespace server
         bool israndom = !strcmp(reqmap, "<random>");
         if(G(votechoices))
         {
-            if(gamestate != G_S_VOTING || israndom || reqmode != gamemode || reqmuts != mutators ||
+            if((gamestate != G_S_VOTING && !(G(votestyle) == 3 && gs_playing(gamestate))) || israndom || reqmode != gamemode || reqmuts != mutators ||
                 listincludes(sv_votemaps, reqmap, strlen(reqmap)) < 0)
             {
-                srvmsgf(sender, colourred, "Vote for one of the offered maps during the voting period");
+                srvmsgf(sender, colourred, "Vote for one of the offered maps while voting is available");
                 return;
             }
         }
@@ -3124,7 +3128,7 @@ namespace server
         ci->modevote = reqmode;
         ci->mutsvote = reqmuts;
         ci->lastvote = totalmillis ? totalmillis : 1;
-        if(hasveto && !G(votechoices))
+        if(hasveto && !G(votechoices) && !(G(votestyle) == 3 && gs_playing(gamestate)))
         {
             sendpackets(true);
             endmatch();
@@ -5398,6 +5402,7 @@ namespace server
 
     void useevent::process(clientinfo *ci)
     {
+        if(G(csgopennoloot)) return;
         if(ci->state != CS_ALIVE || !sents.inrange(ent) || sents[ent].type != WEAPON)
         {
             srvmsgf(ci->clientnum, colourorange, "Sync error: %s use [%d] failed - unexpected message", colourname(ci), ent);
@@ -6010,6 +6015,7 @@ namespace server
 
                 if(gamestate == G_S_PLAYING)
                 {
+                    if(G(votechoices) && G(votestyle) == 3) pickvotechoices();
                     if(m_team(gamemode, mutators)) doteambalance(true);
 
                     if(m_play(gamemode))

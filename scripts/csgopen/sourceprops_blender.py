@@ -418,13 +418,16 @@ class ObjPart:
         self.pending.clear()
         self.sealed = True
 
-    def close(self, sourcebsp, texture_names: dict[str, str], scale: float) -> None:
+    def close(self, sourcebsp, texture_names: dict[str, str], scale: float,
+              opaque_alpha_materials: set[str] | None = None) -> None:
         self.seal(sourcebsp)
         config = ['objload "props.obj"', "mdlcullface 0", f"mdlscale {scale * 100:.9g}", "mdlcollide 0"]
         for mesh, material in sorted(self.bindings.items()):
             texture = texture_names.get(material)
             if texture:
                 config.insert(1, f'objskin "{mesh}" "../textures/{texture}"')
+                if opaque_alpha_materials and material in opaque_alpha_materials:
+                    config.append(f'objalphatest "{mesh}" 0')
         (self.directory / "obj.cfg").write_text("\n".join(config) + "\n", encoding="utf-8")
 
 
@@ -805,8 +808,11 @@ def main() -> int:
         dummy_meshes = {material: [material] for material in materials}
         texture_names = {}
         texture_stats = sourcebsp._extract_materials(content, dummy_meshes, texture_dir, texture_names)
+        opaque_alpha_materials = {
+            material for material in materials if sourcebsp._has_opaque_alpha_mask(content, material)
+        }
         for part in writer.parts:
-            part.close(sourcebsp, texture_names, args.scale)
+            part.close(sourcebsp, texture_names, args.scale, opaque_alpha_materials)
 
     manifest = {
         "models": [part.relative for part in writer.parts]

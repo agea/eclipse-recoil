@@ -424,6 +424,14 @@ SERVER_OBJS = \
     engine/server-standalone.o \
     game/server-standalone.o
 
+ifeq (1,$(CSGOPEN_VOTE_TEST))
+    ifeq ($(APPSERVER),$(APPNAME)_server)
+        $(error CSGOPEN_VOTE_TEST requires a separate APPSERVER path)
+    endif
+    SERVER_OBJS := $(filter-out game/server-standalone.o,$(SERVER_OBJS)) tests/csgopenvoteserver-standalone.o
+    tests/csgopenvoteserver-standalone.o: game/server.cpp game/game.h game/vars.h
+endif
+
 ifeq (1,$(CSGOPEN_FALL_TEST))
     ifeq ($(APPSERVER),$(APPNAME)_server)
         $(error CSGOPEN_FALL_TEST requires a separate APPSERVER path)

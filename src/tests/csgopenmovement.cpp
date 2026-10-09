@@ -49,6 +49,38 @@ namespace movementtest
         loopi(100) physics::moveplayer(&d, 10, false, 5);
     }
 
+    ICOMMAND(0, movementspawns, "f", (float *alphafloor),
+    {
+        int clock = lastmillis;
+        int count = 0;
+        const vector<extentity *> &ents = entities::getents();
+        loopv(ents) if(ents[i]->type == PLAYERSTART)
+        {
+            extentity &e = *ents[i];
+            loopj(8)
+            {
+                gameent d;
+                actor(d, 80, W_SMG);
+                d.team = e.attrs[0];
+                entities::spawnplayer(&d, i, false);
+                vec start(d.feetpos());
+                loopk(1000)
+                {
+                    lastmillis = clock+k*5;
+                    physics::moveplayer(&d, 10, false, 5);
+                }
+                bool supported = d.physstate >= PHYS_SLOPE && d.feetpos().z >= e.o.z-24 &&
+                    (d.team != T_ALPHA || d.feetpos().z >= *alphafloor-1);
+                conoutf(colourwhite, "MOVEMENT_SPAWN ENT %d TEAM %d RUN %d AUTHORED %.3f %.3f %.3f START %.3f %.3f %.3f END %.3f %.3f %.3f STATE %d", i, e.attrs[0], j, e.o.x, e.o.y, e.o.z, start.x, start.y, start.z, d.o.x, d.o.y, d.feetpos().z, d.physstate);
+                check(supported, "spawn_settles_on_authored_level");
+                lastmillis = clock;
+                cleardynentcache();
+                count++;
+            }
+        }
+        conoutf(colourwhite, "MOVEMENT_SPAWNS_DONE CASES %d FAILURES %d", count, failures);
+    });
+
     ICOMMAND(0, movementseam, "i", (int *which),
     {
         gameent d;

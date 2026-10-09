@@ -2674,3 +2674,211 @@ holder sent through waiting/reset, while ordinary full-fuse in-hand detonation
 and HE bullet-triggered detonation keep their existing paths. Manual checks of
 moving holders and converted-map surfaces remain open. No map assets changed;
 rebuild/update and restart clients and servers together for protocol 285.
+
+
+### TDM without map or player loot (2026-10-09)
+
+The TDM preset enables synchronized `sv_csgopennoloot 1`. The server suppresses
+map weapon/ammunition items, rejects pickups/manual equipment drops, and
+prevents ordinary inventory and prize loot on death/reset. Clients hide map
+pickups and pre-existing dropped-inventory models during gameplay. Respawn
+loadouts and the release of already armed grenades remain available. The
+original profile defaults the rule off; protocol remains 285.
+
+Executed checks in `.csgopen/no-loot-20261009/`:
+
+- Production client/server rebuild succeeds (`build.log`). The separate opt-in
+  native test client/server build succeeds (`test-build-final.log`). The first
+  test build hit a comma-separated declaration inside the `ICOMMAND` macro;
+  separate declarations corrected the harness. Production compilation passed.
+- `unit-server.log` reports `PRIMED_SERVER_DONE FAILURES 0`, including new
+  no-loot checks: valid map items and inventory/prize drops work with the flag
+  off, then the enabled flag rejects map items, despawns an already spawned
+  item, prevents death loot, manual drop, ammunition pickup and prize loot.
+- `network-client.log` reports three `PRIMED_NETWORK_DONE ... FAILURES 0`
+  results for HE, smoke and launcher death drops against the rebuilt production
+  loopback server. Each death leaves zero `PROJ_ENTITY` loot while the one armed
+  grenade falls, retains its remaining fuse and expires normally. Smoke still
+  emits its cloud. The server checks include bot grenade release.
+- `loot-client.log` reports `LOOT_CHECK PASS` before and after an unarmed-player
+  suicide on Echo. Both samples find 40 authored map weapon entities, zero
+  allowed gameplay pickup models, zero spawned pickups and zero dropped loot.
+  These are native state/eligibility checks, not a screenshot-based visual review.
+- The canonical production loopback smoke reports `SMOKE_DONE FAILURES 0` in
+  `smoke.log`, including the synchronized no-loot flag, respawn and map change.
+- `git diff --check` passes. The runner stopped all temporary test clients and
+  servers. The live LAN server was not restarted.
+
+No maps or assets were edited. Update/restart clients and servers to use the
+new binaries and preset; converted-map packages need no regeneration.
+
+### More forgiving TDM fall threshold (2026-10-09)
+
+After a reported low-wall drop cost 15 health, the TDM safe impact speed was
+raised from 100 to 160 world units/second. Damage remains one health point per
+excess unit; the original profile and production physics code are unchanged.
+This is a synchronized preset adjustment, with no protocol or map changes.
+
+Executed checks in `.csgopen/fall-threshold-20261009/`:
+
+- Native prerequisite check and production build target pass (`check.log`,
+  `build.log`); production binaries were already current. Separate opt-in fall
+  client/server binaries build successfully (`test-build.log`).
+- `unit-server.log` reports `FALL_DONE FAILURES 0`: speed 115 (formerly 15
+  damage) and the exact threshold 160 are harmless; speed 210 removes 50 health.
+  Existing duplicate, old-life, water, climb, bot and lethal checks still pass.
+- `network-client.log` reports `FALL_NETWORK_DONE FAILURES 0` against the
+  production loopback server: a seeded downward speed of 115 and an actual
+  ordinary jump retain full health, speed 210 leaves 49 health after the final
+  gravity step, damage does not repeat, and speed 280 kills. This checks impact
+  handling on the flat fixture, not the exact wall from the user's map.
+- The production client passes the canonical dedicated-loopback smoke on Echo:
+  `SMOKE_DONE FAILURES 0` in `smoke.log`, including synchronized safe speed 160.
+- `git diff --check` passes. All temporary test clients and servers are stopped.
+
+The existing LAN server was not restarted; its active setting needs to be
+updated or the server restarted with the adjusted preset.
+
+
+### Mid-match map-cycle majority vote (2026-10-09)
+
+The small-group preset enables `sv_votestyle 3`. Three rotation candidates
+are available in Vote Map/Mode during play and overtime. A vote for a candidate
+requests an immediate match end and change to that destination, requiring
+`floor(connected humans / 2) + 1` votes including spectators and excluding bots.
+The intermission ballot still receives fresh candidates and waits for its
+configured duration. Original-profile defaults and protocol 285 are unchanged.
+
+Executed checks in `.csgopen/map-vote-20261009/` and the paths recorded in its
+network logs:
+
+- Production native client/server build passes (`build.log`, `build-final.log`).
+  The initial rebuild reports the existing unrelated indentation warning in
+  `game.cpp`; the final incremental rebuild passes without warnings.
+- The separate opt-in server builds with `CSGOPEN_VOTE_TEST=1` and a dedicated
+  `APPSERVER` path (`test-build.log`). `unit-server.log` reports
+  `VOTE_DONE FAILURES 0`: one through six humans, exact-half rejection,
+  spectator inclusion, split destinations, bot-vote exclusion, overtime,
+  immediate selected-map change, and intermission styles 0 and 3.
+- The production loopback shortlist client reports `VOTECHOICES_DONE FAILURES 0`
+  for `--mid-match`: three distinct non-current candidates, current-map
+  rejection, normalized `maps/` vote acceptance, immediate solo majority,
+  chosen-map loading and new candidates for the next match.
+- The final `--mid-match` run (`network-final.log`) also passes. Its
+  `client/ballot.png` was visually inspected: all three previews and the
+  majority explanation appear in the active-match voting panel without overlap.
+- The existing end-of-match network test reports
+  `VOTECHOICES_DONE FAILURES 0` in `intermission.log`, including rejection of
+  outside candidates and waiting after a solo vote until the ballot expires.
+- The canonical production dedicated-loopback smoke reports
+  `SMOKE_DONE FAILURES 0` (`checks.log`, `smoke.log`), including death/respawn,
+  synchronized gameplay rules and map change. Python syntax and
+  `git diff --check` pass.
+
+The native unit harness uses server client records; the mid-match network run
+uses one real client. Multi-human network voting and departure-triggered
+recalculation remain manual checks; the latter is also covered by inspection
+of the existing disconnect/checkvotes path. All temporary test servers use
+loopback and disable master registration. The live LAN server was not
+restarted. Update/restart clients and servers for the binaries and preset;
+map assets and packages need no regeneration.
+
+### Safehouse CT terrain alpha repair (2026-10-09)
+
+Source `WorldVertexTransition` materials use texture alpha as a blend mask.
+The imported OBJ model's default alpha test discarded most pixels of the
+old-leaves ground texture, exposing the neutral grey backing on the CT side.
+The converter now emits `objalphatest <mesh> 0` for these materials, including
+VMT patch inheritance. Other materials retain their existing transparency.
+The existing Safehouse ZIP is patched in place for ten terrain groups.
+
+Executed checks in `.csgopen/safehouse-terrain-20261009/`:
+
+- All 26 Source BSP converter tests pass, including terrain shader detection,
+  patch inheritance, missing materials, include cycles and tree transparency.
+- A fresh Safehouse conversion emits the same ten alpha-test overrides as the
+  installed package (`TERRAIN_EXPORT_PASS`); no map recompilation is required.
+- ZIP integrity and entry comparisons pass. Only the world `obj.cfg` changes;
+  all textures, visible meshes, collision meshes, MPZ and map CFG are byte exact.
+  Package CRC32 is `7a993c2f`; the package remains a local ignored asset.
+- The production native client loads the patched map in an isolated offline
+  profile and emits `TERRAIN_DONE`. The first sandbox launch could not initialize
+  SDL displays; the subsequent desktop launch succeeds. No rebuild is needed.
+- `profile/ct-terrain-visible.png` was visually inspected: the outdoor ground
+  renders continuously with grass and leaves. This is a spectator view, not an
+  exact reproduction of the user's camera; the scripted team join was rejected.
+- `git diff --check` passes.
+
+The conversion still renders the first base texture, without Source's full
+second-layer terrain blending. The running LAN server is not restarted;
+restart it to refresh package metadata and reconnect clients for the new ZIP.
+
+### Bank vehicle body alpha repair (2026-10-09)
+
+Bank's imported `flatnose_truck`, `pickup_trucks` and `4carz1024` body
+materials use `$basealphaenvmapmask` or `$blendtintbybasealpha`. Their DDS alpha
+is a reflection/tint mask, but the OBJ model's default alpha test discarded
+bodywork pixels. The static-prop exporter now disables alpha testing for these
+mask materials unless the VMT explicitly enables translucency or alpha testing.
+The installed Bank package patches 409 material groups across ten prop CFGs.
+Glass material commands retain their original behavior.
+
+Executed checks in `.csgopen/bank-trucks-20261009/`:
+
+- All 27 Source BSP tests pass, including quoted/unquoted mask flags, inherited
+  patches, explicit transparency, disabled flags, missing materials and cycles.
+- All 14 Blender exporter tests pass, including per-mesh body-mask emission
+  while keeping the glass binding and its alpha-test behavior. The sandbox
+  Blender launch crashed at startup; the desktop background run succeeds.
+- ZIP integrity and entry comparisons pass. Only ten prop `obj.cfg` files
+  change; all texture bytes, render/collision geometry, MPZ and map CFG are
+  unchanged. Package CRC32 is `93826041`; this remains a local ignored asset.
+- The production client loads Bank from the patched ZIP in a separate offline
+  profile and emits `BANK_TRUCKS_DONE`. The first spectator screenshot shows
+  continuous car bodywork. Client/server binaries need no rebuild.
+- The additional camera sweep was visually inspected. `bank-camera-4.png`
+  shows the truck's complete cab and wheels, with the bodywork holes repaired;
+  views 2–5 and 12–15 also show intact vehicle bodies from other angles.
+- `git diff --check` passes.
+
+The running LAN server is not restarted. Restart it to refresh package
+metadata and reconnect clients to receive the new ZIP. This change retains
+existing glass rendering; it does not recreate Source's reflective shaders.
+
+### Agency CT starts below the platform (2026-10-09)
+
+Six Source CT starts sit over a static-prop platform rather than BSP floor.
+The converter snapped these to the world floor at Source Z=256 instead of
+retaining their authored Z=416.019, lowering the resulting starts beneath the
+platform. Four reliably settled below it; two were recovered by `entinmap`.
+The converter now snaps only to BSP support within 20 Source units of the
+start. When support is more distant or missing, it retains the authored height.
+Agency's installed ZIP corrects these six CT starts without rebuilding geometry.
+
+Executed checks in `.csgopen/agency-spawns-20261009/`:
+
+- The separate native movement-test client builds successfully. Its initial
+  build hit a comma-separated variable declaration inside `ICOMMAND`; separate
+  declarations corrected that test-only compilation error. Production code and
+  client/server binaries are unchanged.
+- The new `movementspawns 3124` test invokes the actual `spawnplayer` path at
+  all 32 authored starts, eight times each, then simulates five seconds of
+  settling. It checks floor support, excessive drop and the CT platform level.
+  `baseline.log` reproduces 32 failures across the four bad CT starts;
+  `final.log` reports `MOVEMENT_SPAWNS_DONE CASES 256 FAILURES 0` and
+  `MOVEMENT_DONE FAILURES 0`. All 16 CT starts settle near world Z=3126.
+- The native editor saves the corrected MPZ. The first attempt did not toggle
+  edit mode and was rejected by the entity editor; that candidate was not
+  installed. `editor-fixed.log` records six successful edits and the save.
+- The decompressed MPZ comparison permits only the six spawn Z floats and two
+  changed save-revision bytes. All other decompressed bytes are identical.
+  ZIP integrity passes, and every other entry, including map CFG, visible
+  geometry, textures and collisions, is byte exact. Package CRC32 is `d0309dbb`.
+- All 28 Source BSP tests pass, including nearby-floor snapping, distant-floor
+  rejection, absent support and the exact 20-unit boundary. `git diff --check`
+  passes. Temporary clients have exited; the live LAN server was not restarted.
+
+The native test covers each individual spawn with the SMG actor and actual
+collision handling, not a crowded multi-client respawn sequence. Restart the
+LAN server and reconnect clients to refresh the map package. No production
+binary rebuild is required; the ZIP remains a local ignored asset.

@@ -2705,6 +2705,7 @@ namespace projs
         {
             projent &proj = *projs[i];
             if(proj.projtype == PROJ_AFFINITY || (drawtex == DRAWTEX_HALO && proj.projtype != PROJ_ENTITY)) continue;
+            if(csgopennoloot && proj.projtype == PROJ_ENTITY) continue;
             if((proj.projtype == PROJ_ENTITY && !entities::ents.inrange(proj.id)) || !projs[i]->mdlname || !*projs[i]->mdlname) continue;
 
             const char *mdlname = proj.mdlname;

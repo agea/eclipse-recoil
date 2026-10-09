@@ -7,6 +7,9 @@ CS:GO movement or weapons.
 - Work only in this repository; preserve the original gameplay.
 - The CSGOpen TDM preset enables friendly fire for humans and bots, with a
   team damage multiplier of 1, as requested after the initial milestone.
+- The TDM preset has no map pickups, ammunition loot, manual equipment drops,
+  death loot, or prize drops (`sv_csgopennoloot 1`). Preserve the release and
+  remaining fuse of already armed grenades when their holder dies.
 - TDM servers start without bots (`sv_botbalance 0`, `sv_botoffset 0`). Bot
   filling must be explicitly enabled after loading the preset.
 - Always write and update README files and `AGENTS.md` in English. This includes
@@ -33,7 +36,10 @@ CS:GO movement or weapons.
 - Bind test servers to loopback, without public master registration or cloud
   deployment.
 - The small-group server preset uses a random starting map and three random
-  choices at intermission (`sv_votechoices 3`). Keep the upstream free-vote
+  choices during play and at intermission (`sv_votechoices 3`). Mid-match
+  changes require a strict majority of connected humans, including spectators
+  and excluding bots (`sv_votestyle 3`); votes must agree on one destination.
+  Keep the upstream free-vote
   behavior available with `sv_votechoices 0`; do not include `de_stmarc` in the
   preset until its conversion has been repaired.
 - Do not perform destructive Git resets, commits, pushes, or publication unless

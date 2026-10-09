@@ -101,8 +101,8 @@ probe to find a tread. It also tries the slope tangent when entering a walkable
 bevel from a flat tread. The swept body path and the normal walkable-slope limit still apply.
 
 The TDM preset enables fall damage for humans and bots. Downward impact speeds
-up to 100 world units/second are safe; each excess unit costs one health point.
-Normal ground jumps remain safe. Water at half submersion cushions the landing,
+up to 160 world units/second are safe; each excess unit costs one health point.
+Normal ground jumps and low-wall drops remain safe. Water at half submersion cushions the landing,
 and automatic climbing does not cause fall damage. The original profile leaves
 it disabled. Rebuild and restart clients and servers together for protocol 285;
 map packages do not need regeneration. See [fall damage](gameplay.md#fall-damage).
@@ -157,6 +157,23 @@ and reads VMT/VTF assets first from the BSP pakfile and then from an optional
 game VPK. DXT1, DXT3 and DXT5 textures are converted losslessly to DDS. Maps
 with a `sky_camera` use a generous start-based envelope to exclude the remote
 3D skybox model.
+
+`WorldVertexTransition` terrain materials disable model alpha testing, including
+materials inherited through VMT patches. Their texture alpha is a blend mask;
+discarding low-alpha pixels exposes the grey backing under the ground.
+The converter still displays the first base texture rather than reproducing
+Source's two-layer terrain blend. Safehouse's package includes this correction.
+
+The static-prop exporter also disables alpha testing for opaque materials using
+base alpha as a reflection or tint mask (`$basealphaenvmapmask` or
+`$blendtintbybasealpha`). Explicit translucent and alpha-tested materials keep
+their existing behavior. Bank's vehicle body materials include this correction;
+glass materials are unchanged.
+
+Source spawn snapping uses a nearby BSP floor only within 20 Source units of
+the authored position. More distant floors may lie below a static-prop platform;
+those starts retain their authored height and settle against the imported prop
+collision. Agency's six affected CT starts use this correction.
 
 The end-to-end wrapper locates `pak01_dir.vpk` next to a normal Steam game
 installation, generates a staged package, and uses the client editor to save a
@@ -527,8 +544,9 @@ tuning is 180 maximum base damage (scaled from 1800 engine damage) with a
 72-unit blast radius and distance attenuation. These are prototype values,
 not a verified CS:GO HE reproduction. One grenade is consumed per throw or
 in-hand detonation. The loadout grants up to four utilities in total at respawn,
-with no reserve or reload between throws. Utility pickups are blocked in this
-preset so map loot cannot bypass the equipment choice. The Mine slot supplies the separate circular proximity mine.
+with no reserve or reload between throws. All map pickups, ammunition loot, manual inventory drops and death/prize loot
+are disabled in this preset. Equipment comes only from the selected respawn
+loadout. Already armed grenades still fall and finish their remaining fuse. The Mine slot supplies the separate circular proximity mine.
 
 ### Smoke grenade
 
@@ -679,6 +697,16 @@ the server to change the map list or match settings.
 Matches last 10 minutes without a score limit or overtime, followed by 10
 seconds of results and a 20-second ballot. `sv_votechoices 3` draws three
 unique random maps from the rotation, excluding the current map. The server
+also offers a shortlist when play begins. Open **Vote Map/Mode** during a
+match and click a preview to vote for an immediate change to that map.
+`sv_votestyle 3` requires `floor(connected humans / 2) + 1` votes for the same
+destination (two of three, three of four), counting spectators and excluding
+bots. A passing vote ends the current match and loads the chosen map without
+waiting for results or the end-of-match ballot. Players may change or cancel
+their vote, and departures recalculate the majority. A new shortlist and
+fresh votes are used at intermission. `sv_votestyle 0` disables mid-match
+changes while retaining the intermission shortlist.
+The server
 synchronizes the shortlist through the read-only `votemaps` variable; updated
 clients show three clickable map previews with titles in the voting panel. Votes must choose one of those
 maps and retain the current mode and mutators. Earlier proposals are cleared,
@@ -729,6 +757,7 @@ checks empty-ballot fallback. Logs stay under `.csgopen/votechoices-test/`.
 ```sh
 python3 scripts/csgopen/test_votechoices.py
 python3 scripts/csgopen/test_votechoices.py --no-vote
+python3 scripts/csgopen/test_votechoices.py --mid-match
 ```
 
 Package regression tests use an isolated loopback server without public registration:
@@ -815,3 +844,14 @@ controls. See the Safehouse checks in [validation](validation.md).
 The TDM first-person view displays weapon/arms without the separate body model,
 so leg animations cannot obstruct the view on stairs. This is a client display
 preference; it does not change traversal or require regenerating map packages.
+
+
+### Loadouts without loot
+
+The TDM preset synchronizes `sv_csgopennoloot 1`. Map weapon/ammunition pickups
+do not spawn or render during play; pickups, manual inventory drops, death
+loot and prize drops are rejected by the server for humans and bots. Respawn
+loadouts and normal reloads remain available. Armed grenades are active
+projectiles, not pickups: they still fall on death and keep their remaining fuse.
+The original profile defaults the rule off. Rebuild/update clients and servers
+and restart the match; map packages need no regeneration. Protocol remains 285.

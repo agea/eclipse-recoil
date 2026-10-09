@@ -995,6 +995,7 @@ struct clientstate
 
     bool candrop(int weap, int sweap, int millis, bool classic, int skip = 0)
     {
+        if(G(csgopennoloot)) return false;
         if(G(csgopenmovement) && (climbing || millis < climbdrawuntil)) return false;
         if(cookinghe() || cookingsmoke()) return false;
         if(!(A(actortype, abilities)&(1<<A_A_AMMO))) return false;
@@ -1040,6 +1041,7 @@ struct clientstate
 
     bool canuseweap(int gamemode, int mutators, int attr, int sweap, int millis, int skip = 0, bool full = true)
     {
+        if(G(csgopennoloot)) return false;
         if(G(csgopenmovement) && (climbing || millis < climbdrawuntil)) return false;
         if(cookinghe() || cookingsmoke()) return false;
         if(G(csgopenweapons) && (csgopenutility(attr) || !hasweap(attr, sweap))) return false;

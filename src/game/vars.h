@@ -234,8 +234,8 @@ GVAR(0, PRIV_MODERATOR, votelock, 0, PRIV_MODERATOR, PRIV_MAX);
 GVAR(0, PRIV_MODERATOR, votelocktype, 0, 2, 2); // 0 = off, 1 = lock level only, 2 = lock level can select previousmaps
 GVAR(0, PRIV_MODERATOR, votefilter, 0, 1, 1); // 0 = off, 1 = skip spectators
 GVAR(0, PRIV_MODERATOR, votewait, 0, 2500, VAR_MAX);
-GVAR(0, PRIV_MODERATOR, votestyle, 0, 2, 2); // 0 = votes don't pass mid-match, 1 = passes if votethreshold is met, 2 = passes if unanimous
-GVAR(0, PRIV_MODERATOR, votechoices, 0, 0, 16); // 0 = free proposals, otherwise random shortlist at intermission
+GVAR(0, PRIV_MODERATOR, votestyle, 0, 2, 3); // 0 = disabled mid-match, 1 = threshold, 2 = unanimous, 3 = strict majority of all humans while playing
+GVAR(0, PRIV_MODERATOR, votechoices, 0, 0, 16); // 0 = free proposals, otherwise random shortlist (also while playing with votestyle 3)
 GSVAR(IDF_READONLY, 0, votemaps, "");
 GVAR(0, PRIV_MODERATOR, voteinterm, 0, 2, 3); // 0 = must wait entire time, 1 = passes if votethreshold is met, 2 = passes if unanimous, 3 = passes after waiting then selects a random vote
 GFVAR(0, PRIV_MODERATOR, votethreshold, 0, 0.5f, 1); // auto-pass votes when this many agree
@@ -599,6 +599,7 @@ GFVAR(IDF_GAMEMOD, 0, movebrakescale, FVAR_NONZERO, 1.0f, FVAR_MAX); // grounded
 GVAR(IDF_GAMEMOD, 0, csgopensmokeduration, 1000, 18000, 60000);
 GFVAR(IDF_GAMEMOD, 0, csgopensmokeradius, 8, 56, 128);
 GVAR(IDF_GAMEMOD, 0, csgopenweapons, 0, 0, 1); // expanded loadout, with rifle zoom as the only secondary mode
+GVAR(IDF_GAMEMOD, 0, csgopennoloot, 0, 0, 1); // loadouts only: no map pickups or dropped inventory
 GFVAR(IDF_GAMEMOD, 0, spreadburstadd, 0, 0.0f, FVAR_MAX); // primary-fire spread buildup per shot, disabled by default
 GFVAR(IDF_GAMEMOD, 0, pistolspreadburstscale, 0, 1.0f, FVAR_MAX); // pistol buildup relative to the shared per-shot amount
 GFVAR(IDF_GAMEMOD, 0, spreadburstmax, 0, 1.5f, FVAR_MAX); // maximum extra spread multiplier

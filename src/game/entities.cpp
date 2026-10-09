@@ -803,6 +803,7 @@ namespace entities
 
     bool isallowed(const extentity &e)
     {
+        if(csgopennoloot && e.type == WEAPON && !editmode) return false;
         if(m_dark(game::gamemode, game::mutators) && e.type == LIGHT) return false;
         if(enttype[e.type].modesattr >= 0 && !m_check(e.attrs[enttype[e.type].modesattr], e.attrs[enttype[e.type].modesattr+1], game::gamemode, game::mutators)) return false;
         if(enttype[e.type].mvattr >= 0 && !checkmapvariant(e.attrs[enttype[e.type].mvattr])) return false;

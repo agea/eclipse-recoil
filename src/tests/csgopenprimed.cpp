@@ -6,6 +6,25 @@ namespace primedtest
     int failures = 0, started = 0;
     float startz = 0;
 
+    ICOMMAND(0, lootcheck, "", (),
+    {
+        int total = 0;
+        int visible = 0;
+        int spawned = 0;
+        int dropped = 0;
+        loopv(entities::ents)
+        {
+            extentity &e = *entities::ents[i];
+            if(e.type != WEAPON) continue;
+            total++;
+            if(entities::isallowed(e)) visible++;
+            if(e.spawned()) spawned++;
+        }
+        loopv(projs::projs) if(projs::projs[i]->projtype == PROJ_ENTITY) dropped++;
+        conoutf(colourwhite, "LOOT_CHECK %s MAP_ITEMS %d ALLOWED %d SPAWNED %d DROPPED %d",
+            csgopennoloot && total > 0 && !visible && !spawned && !dropped ? "PASS" : "FAIL", total, visible, spawned, dropped);
+    });
+
     void check(bool ok, const char *name)
     {
         if(!ok) failures++;
@@ -44,6 +63,9 @@ namespace primedtest
         }
         if(*phase == 0)
         {
+            int loot = 0;
+            loopv(projs::projs) if(projs::projs[i]->projtype == PROJ_ENTITY) loot++;
+            check(loot == 0, "death_releases_no_loot");
             check(count == 1 && found->state != CS_DEAD, "one_live_grenade_after_death");
             if(found)
             {

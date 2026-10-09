@@ -61,9 +61,13 @@ maps are verified and cached in the client profile. See the development guide
 for the current loopback HTTP setup and validation results.
 
 The TDM preset also applies fall damage to humans and bots above a configurable
-vertical impact-speed threshold; normal jumps remain safe. Clients and servers
+vertical impact-speed threshold of 160 world units/second; normal jumps and
+low-wall drops remain safe. Clients and servers
 require a rebuild and restart together for protocol 285. See the
 [fall-damage rules](doc/csgopen/gameplay.md#fall-damage).
+
+TDM equipment comes from respawn loadouts: map pickups, ammunition loot,
+manual equipment drops and death/prize loot are disabled for humans and bots.
 
 An armed HE, smoke grenade or launcher round falls when its holder dies and
 keeps its remaining fuse. Death neither restarts the timer nor detonates it
