@@ -62,8 +62,12 @@ for the current loopback HTTP setup and validation results.
 
 The TDM preset also applies fall damage to humans and bots above a configurable
 vertical impact-speed threshold; normal jumps remain safe. Clients and servers
-require a rebuild and restart together for protocol 284. See the
+require a rebuild and restart together for protocol 285. See the
 [fall-damage rules](doc/csgopen/gameplay.md#fall-damage).
+
+An armed HE, smoke grenade or launcher round falls when its holder dies and
+keeps its remaining fuse. Death neither restarts the timer nor detonates it
+early; an unarmed grenade stays unarmed.
 
 ## Licensing and attribution
 

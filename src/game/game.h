@@ -5,7 +5,7 @@
 #include "mappackage.h"
 
 #define VERSION_GAMEID "fps"
-#define VERSION_GAME 284
+#define VERSION_GAME 285
 #define VERSION_DEMOMAGIC "RED_ECLIPSE_DEMO"
 
 #define MAXAI 256
@@ -325,9 +325,9 @@ ENUM_VAR(IM_T_ROLLER, (1<<IM_T_JUMP)|(1<<IM_T_WALLRUN)|(1<<IM_T_VAULT));
 #define SPHY_ENUM(en, um) \
     en(um, Jump, JUMP) en(um, Boost, BOOST) en(um, Dash, DASH) en(um, Slide, SLIDE) en(um, Launch, LAUNCH) en(um, Melee, MELEE) en(um, Kick, KICK) en(um, Grab, GRAB) \
     en(um, Wallrun, WALLRUN) en(um, Vault, VAULT) en(um, Pound, POUND) en(um, Material, MATERIAL) en(um, Prize, PRIZE) en(um, Switch, SWITCH) en(um, Extinguish, EXTINGUISH) \
-    en(um, Buff, BUFF) en(um, Hacked, HACKED) en(um, Climb, CLIMB) en(um, ClimbEnd, CLIMBEND) en(um, Fall, FALL) en(um, Max, MAX)
+    en(um, Buff, BUFF) en(um, Hacked, HACKED) en(um, Climb, CLIMB) en(um, ClimbEnd, CLIMBEND) en(um, Fall, FALL) en(um, PrimedDrop, PRIMEDDROP) en(um, Max, MAX)
 ENUM_DLN(SPHY);
-ENUM_VAR(SPHY_SERVER, (1<<SPHY_EXTINGUISH)|(1<<SPHY_BUFF)|(1<<SPHY_HACKED));
+ENUM_VAR(SPHY_SERVER, (1<<SPHY_EXTINGUISH)|(1<<SPHY_BUFF)|(1<<SPHY_HACKED)|(1<<SPHY_PRIMEDDROP));
 
 #define CROUCHLOW 0.7f
 #define CROUCHHIGH 0.9f
@@ -954,6 +954,13 @@ struct clientstate
     bool cookinghe() const
     {
         return G(csgopenweapons) && (weapselect == W_GRENADE || weapselect == W_ROCKET) && weapstate[weapselect] == W_S_POWER;
+    }
+
+    int primedfuse(int millis) const
+    {
+        if(!cookinghe() && !cookingsmoke()) return 0;
+        float cooked = clamp((millis-weaptime[weapselect])/float(max(W2(weapselect, cooktime, false), 1)), 0.0f, 1.0f);
+        return max(int(ceilf(W2(weapselect, time, false)*(1.0f-cooked))), 1);
     }
 
     bool climbweaponhidden() const
@@ -2945,6 +2952,7 @@ namespace projs
     extern void sticky(gameent *d, int id, vec &norm, vec &pos, gameent *f = NULL);
     extern void shootv(int weap, int flags, int sub, int offset, float scale, vec &from, vec &dest, vector<shotmsg> &shots, gameent *d, bool local, gameent *v = NULL);
     extern void drop(gameent *d, int weap, int ent, int ammo = -1, bool local = true, int targ = -1, int index = 0, int count = 1, gameent *target = NULL);
+    extern projent *dropprimed(gameent *d, int weap, int fuse, int id, bool local);
     extern void render();
 }
 

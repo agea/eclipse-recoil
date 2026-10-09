@@ -432,6 +432,19 @@ ifeq (1,$(CSGOPEN_FALL_TEST))
     tests/csgopenfallserver-standalone.o: game/server.cpp game/game.h game/vars.h game/weapons.h
 endif
 
+ifeq (1,$(CSGOPEN_PRIMED_TEST))
+    ifeq ($(APPCLIENT),$(APPNAME))
+        $(error CSGOPEN_PRIMED_TEST requires a separate APPCLIENT path)
+    endif
+    ifeq ($(APPSERVER),$(APPNAME)_server)
+        $(error CSGOPEN_PRIMED_TEST requires a separate APPSERVER path)
+    endif
+    CLIENT_OBJS := $(filter-out game/projs.o,$(CLIENT_OBJS)) tests/csgopenprimed.o
+    SERVER_OBJS := $(filter-out game/server-standalone.o,$(SERVER_OBJS)) tests/csgopenprimedserver-standalone.o
+    tests/csgopenprimed.o: game/projs.cpp game/game.h game/vars.h
+    tests/csgopenprimedserver-standalone.o: game/server.cpp game/game.h game/vars.h
+endif
+
 LIBENET = enet/libenet.a
 
 GENKEY_OBJS = shared/genkey.o shared/crypto-standalone.o

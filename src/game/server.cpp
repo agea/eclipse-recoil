@@ -247,9 +247,9 @@ namespace server
 
         int warnings[WARN_MAX][2];
 
-        int lastfall;
+        int lastfall, primedseq, primedweap;
 
-        servstate() : aireinit(0), lasthurt(0), lastfall(-1)
+        servstate() : aireinit(0), lasthurt(0), lastfall(-1), primedseq(0), primedweap(-1)
         {
             loopi(WARN_MAX) loopj(2) warnings[i][j] = 0;
             loopi(W_R_MAX)
@@ -289,6 +289,7 @@ namespace server
         {
             if(state != CS_SPECTATOR) state = CS_DEAD;
             dropped.reset();
+            primedseq = 0;
             loopi(W_MAX) loopj(2) weapshots[i][j].reset();
             clientstate::mapchange(change);
             rewards[0] = rewards[1] = shotdamage = damage = lasthurt = 0;
@@ -310,6 +311,7 @@ namespace server
             baseent::reset();
             rewards[1] = lasthurt = 0;
             lastfall = -1;
+            primedweap = -1;
             resetresidualowner();
             clientstate::respawn(millis);
         }
@@ -718,15 +720,31 @@ namespace server
         if(ci->hasprize != oldprize) sendf(-1, 1, "ri4", N_SPHY, ci->clientnum, SPHY_PRIZE, ci->hasprize);
     }
 
+    bool dropprimed(clientinfo *ci)
+    {
+        int fuse = ci->primedfuse(gamemillis);
+        if(!fuse) return false;
+        int weap = ci->weapselect;
+        if(A(ci->actortype, abilities)&(1<<A_A_AMMO) && ci->getammo(weap, 0, true) <= 0) return false;
+        // Normal shots use positive sequence IDs; death drops have a separate sequence.
+        if(ci->primedseq >= VAR_MAX) ci->primedseq = 0;
+        int id = -(++ci->primedseq);
+        ci->weapshots[weap][0].add(id);
+        ci->primedweap = weap;
+        if(A(ci->actortype, abilities)&(1<<A_A_AMMO)) takeammo(ci, weap, W2(weap, ammosub, false));
+        ci->setweapstate(weap, W_S_IDLE, 0, gamemillis, 0, true);
+        sendf(-1, 1, "ri6", N_SPHY, ci->clientnum, SPHY_PRIMEDDROP, weap, fuse, id);
+        return true;
+    }
+
     bool dropitems(clientinfo *ci, int flags = DROP_RESET, int target = -1)
     {
         vector<droplist> drop;
         bool explode = (flags&DROP_EXPLODE) != 0, exploded = false;
+        bool armed = !explode && (flags&(DROP_WEAPONS|DROP_KAMIKAZE)) && dropprimed(ci);
 
-        if(!explode && flags&DROP_KAMIKAZE)
+        if(!armed && !explode && flags&DROP_KAMIKAZE)
         {
-            // An armed HE cannot disappear when its holder dies.
-            if(ci->cookinghe()) explode = true;
             if(A(ci->actortype, abilities)&(1<<A_A_KAMIKAZE)) explode = true;
             else switch(G(kamikaze))
             {
@@ -740,7 +758,7 @@ namespace server
         if(explode)
         {
             droplist &d = drop.add();
-            d.weap = ci->cookinghe() && ci->weapselect == W_ROCKET ? W_ROCKET : W_GRENADE;
+            d.weap = W_GRENADE;
             d.ent = d.ammo = -1;
             ci->weapshots[d.weap][0].add(1);
             if(!(flags&DROP_EXPLODE) && A(ci->actortype, abilities)&(1<<A_A_AMMO)) takeammo(ci, d.weap, W2(d.weap, ammosub, false));
@@ -5162,6 +5180,7 @@ namespace server
 
     void shotevent::process(clientinfo *ci)
     {
+        if(ci->state != CS_ALIVE && weap == ci->primedweap) return; // death already released this armed round
         if(!ci->isalive(gamemillis) || !isweap(weap))
         {
             srvmsgf(ci->clientnum, colourorange, "Sync error: %s shoot [%d] failed - unexpected message", colourname(ci), weap);
@@ -5277,6 +5296,7 @@ namespace server
 
     void cookevent::process(clientinfo *ci)
     {
+        if(ci->state != CS_ALIVE && weap == ci->primedweap) return;
         if(!ci->isalive(gamemillis) || !isweap(weap) || etype < -1 || etype > 2)
         {
             srvmsgf(ci->clientnum, colourorange, "Sync error: %s cook [%d] failed - unexpected message", colourname(ci), weap);
@@ -6793,6 +6813,9 @@ namespace server
                     bool proceed = hasclient(cp, ci), qmsg = false;
                     switch(idx)
                     {
+                        case SPHY_PRIMEDDROP:
+                            getint(p); getint(p); getint(p); // server-only event, never accept a client drop
+                            break;
                         case SPHY_MATERIAL:
                         {
                             int inmaterial = getint(p);

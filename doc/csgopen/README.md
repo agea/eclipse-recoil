@@ -75,7 +75,7 @@ the climb and then take their normal draw time. Ground jumps use
 `impulsejump=1.1` instead of 1.5. Clearance and a supported landing are required.
 These settings apply across maps and are synchronized by the server; the
 original profile keeps automatic traversal disabled. The network protocol is
-now 284, so update clients and servers together. See [movement rules](gameplay.md#movimento)
+now 285, so update clients and servers together. See [movement rules](gameplay.md#movimento)
 and [native checks](validation.md#automatic-obstacle-traversal-and-lower-jumps-2026-10-05).
 
 The TDM proximity mine recognizes valid contact normals on imported triangle
@@ -104,7 +104,7 @@ The TDM preset enables fall damage for humans and bots. Downward impact speeds
 up to 100 world units/second are safe; each excess unit costs one health point.
 Normal ground jumps remain safe. Water at half submersion cushions the landing,
 and automatic climbing does not cause fall damage. The original profile leaves
-it disabled. Rebuild and restart clients and servers together for protocol 284;
+it disabled. Rebuild and restart clients and servers together for protocol 285;
 map packages do not need regeneration. See [fall damage](gameplay.md#fall-damage).
 
 ### Quake 3 / Urban Terror map converter
@@ -513,8 +513,12 @@ Press **G** to select it. Hold primary fire to start the **3-second fuse**;
 release to throw. Time spent holding it is deducted from the remaining fuse.
 Holding it for the full three seconds detonates it at the holder, rather than
 throwing it automatically. Switching, dropping and pickups are blocked while
-cooking. Dying with an armed HE triggers immediate detonation at the death
-position; carrying an unarmed grenade does not cause a death explosion.
+cooking. If the holder dies, an armed HE falls with the holder's momentum and
+explodes when its remaining fuse expires. Death does not restart the fuse or
+detonate it early. Carrying an unarmed grenade does not cause a death explosion.
+The same rule applies to an armed smoke grenade and HE launcher round; smoke
+opens normally when its remaining fuse expires. This requires rebuilt clients
+and servers together for protocol 285; no map regeneration is needed.
 
 The HE bounces off surfaces and players, and detonates immediately when hit by a bullet. The firearms
 retain their no-bounce impacts. HE damage has no burn, status effects or extra
@@ -532,7 +536,9 @@ Smoke grenades occupy the same four utility slots as HE and mines. Press
 **H** to select it, hold primary fire to cook the **3-second fuse**, then
 release to throw. Holding it to the fuse limit deploys smoke at the holder.
 Switching, dropping and pickups are blocked while cooking. Smoke causes no
-damage, does not stick, and cannot be detonated by shooting it.
+damage, does not stick, and cannot be detonated by shooting it. An armed smoke
+grenade falls on death and opens after its remaining fuse, even though the
+owner is dead.
 
 The cloud builds up over one second, lasts **18 seconds** including a two-second
 fade, and has a **68-unit radius**. It persists after the thrower's death and

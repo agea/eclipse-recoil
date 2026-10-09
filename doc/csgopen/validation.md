@@ -2630,3 +2630,47 @@ open. Normal jumping and flat-floor damaging/lethal landings were executed onlin
 No map assets or packages changed. Restart clients and servers together to use
 the rebuilt binaries; the existing live LAN server was not restarted by these
 tests.
+
+
+### Armed grenades retain their fuse on death (2026-10-09)
+
+The TDM death/inventory-reset path now releases an armed HE, smoke grenade or
+HE launcher round as a physical projectile with its remaining fuse. It consumes
+one round, preserves projectile authorization after respawn and suppresses late
+cook/shot events that would duplicate a death drop. Unarmed grenades and the
+original profile retain their prior behavior. Protocol 285 adds the server-only
+`SPHY_PRIMEDDROP` message; clients and servers must be updated together.
+
+Executed checks in `.csgopen/primed-drop-20261009/`:
+
+- Native production client/server build passes (`build.log`), with only the
+  existing unrelated indentation warning in `game.cpp`. Separate opt-in test
+  binaries build without errors (`test-build.log`); production binaries do not
+  expose their test commands.
+- `unit-server.log` reports `PRIMED_SERVER_DONE FAILURES 0`. For HE, smoke and
+  launcher it verifies fuse calculation, original weapon authorization, absence
+  of immediate kamikaze detonation, exactly one ammunition consumption, duplicate
+  prevention, late shot/cook rejection, authorization across respawn and unique
+  overlapping death-drop IDs. It also checks unarmed inventory, expired fuse
+  and the original-profile guard. The smoke case uses a bot actor.
+- `network-client.log` reports three `PRIMED_NETWORK_DONE ... FAILURES 0` results
+  against a production dedicated loopback server on the existing flat movement
+  fixture. Real weapon selection/primary input starts cooking, and normal
+  suicide processing releases the grenade. Each weapon has exactly one live
+  falling projectile after death, no forward throw, and a lifetime reduced by
+  the time already held. Remaining lifetimes at the intermediate sample were
+  1,432 ms (HE), 1,538 ms (smoke) and 1,126 ms (launcher). All disappear at
+  the original fuse deadline; smoke creates its ordinary cloud after death.
+  No destroy/shot synchronization errors occurred. These runs verify the
+  projectile lifecycle; blast damage to a second player was not separately
+  measured.
+- `smoke.log` reports `SMOKE_DONE FAILURES 0` for the canonical production
+  dedicated-loopback smoke on Echo, including death/respawn and map change.
+- `git diff --check` passes. The test runner stopped all temporary clients and
+  servers. The live LAN server was not restarted.
+
+Code inspection confirms that physical dropping also applies to an alive
+holder sent through waiting/reset, while ordinary full-fuse in-hand detonation
+and HE bullet-triggered detonation keep their existing paths. Manual checks of
+moving holders and converted-map surfaces remain open. No map assets changed;
+rebuild/update and restart clients and servers together for protocol 285.

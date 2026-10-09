@@ -455,9 +455,9 @@ A scale=1, shootv crea un proiettile con vita 1 ms al centro del proprietario,
 velocità/inertia/falling zero e escaped=true, per esplodere lì attraverso
 il percorso normale e registrare consumo/danni. Non viene lanciato avanti.
 Guardia cookinghe condivisa vieta cambio, drop e pickup durante W_S_POWER.
-Se ucciso mentre arma la HE, dropitems attiva il percorso detonazione sul
-posto; è una detonazione immediata alla morte, non una granata lasciata
-a terra con miccia residua. Il profilo originale non applica queste modifiche.
+Se ucciso con la HE innescata, dropitems lascia cadere una granata fisica
+con la miccia residua calcolata dal server. La morte non anticipa la detonazione
+e non riavvia il timer. Il profilo originale non applica queste modifiche.
 
 Collisione 920: BOUNCE_GEOM|BOUNCE_PLAYER|COLLIDE_OWNER|COLLIDE_PROJ|IMPACT_SHOTS.
 La HE è colpibile: un proiettile la fa detonare subito, in volo o a terra.
@@ -476,7 +476,8 @@ fuse/time 3000 ms, bounce 784, velocità 250, niente stick/proximity.
 Danno/radial/residual 0, fragweap -1, fxtypeproj -1: niente esplosione energetica.
 A miccia completa la smoke si apre in mano senza danno. Switch/drop/pickup
 bloccati durante cook, indipendentemente dalla HE. La morte durante cook
-non attiva una detonazione smoke; una nube già emessa sopravvive al proprietario.
+lascia cadere la smoke innescata: la nube si apre alla scadenza della miccia
+residua. Una nube già emessa sopravvive al proprietario.
 
 projs::destroy sul proiettile Mine del preset crea una smokecloud su ogni
 client usando il percorso nativo dei proiettili e la notifica N_DESTROY.
@@ -666,3 +667,30 @@ plane retains its existing immediate death behavior.
 
 Protocol 284 adds `SPHY_FALL` and `HIT_FALL`. Rebuild and restart clients and
 servers together; no map regeneration is required.
+
+
+### Armed grenades dropped on death
+
+In CSGOpen, `dropitems` releases a held, armed HE (`W_GRENADE`), smoke
+(`W_CORRODER`) or launcher round (`W_ROCKET`) before clearing the inventory.
+The same release applies when an alive holder is sent to waiting/spectator
+through an inventory-drop/reset path. Unarmed inventory does not activate.
+
+The server derives the remaining projectile lifetime from the weapon's cook
+start and existing LIFEN rule, clamps an expired fuse to one millisecond,
+consumes exactly one round and registers its projectile for ordinary explosion
+damage. A server-only `SPHY_PRIMEDDROP` message creates the projectile on every
+client before the death message. Each release has a separate negative ID,
+retained across respawn, to distinguish overlapping death drops from normal
+positive shot IDs. Late cook/shot events cannot duplicate the released round.
+
+The projectile starts at the holder's center with their current movement
+velocity and no forward throw. It retains normal gravity, bounce, collision,
+blast damage or smoke deployment. The owning client keeps simulating it after
+death. The timer is neither restarted nor shortened by death. Existing HE
+bullet-triggered detonation remains active. A grenade held through the full
+fuse while alive retains the existing in-hand detonation. Ordinary upstream
+kamikaze behavior remains available in the original profile.
+
+Protocol 285 adds the server-only drop event; update and restart clients and
+servers together. No converted-map packages need regeneration.

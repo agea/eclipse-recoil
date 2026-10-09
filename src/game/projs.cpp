@@ -1441,6 +1441,18 @@ namespace projs
         return &proj;
     }
 
+    projent *dropprimed(gameent *d, int weap, int fuse, int id, bool local)
+    {
+        vec origin = d->center();
+        projent *proj = create(origin, origin, local, d, PROJ_SHOT, -1, 0, max(fuse, 1), W2(weap, time, false), 0, 0, id, weap);
+        // Release from the holder with their momentum, without the normal forward throw.
+        proj->o = proj->from = proj->dest = proj->trailpos = origin;
+        proj->vel = vec(d->vel).add(d->falling);
+        proj->falling = proj->inertia = vec(0, 0, 0);
+        proj->escaped = true;
+        return proj;
+    }
+
     void drop(gameent *d, int weap, int ent, int ammo, bool local, int targ, int index, int count, gameent *target)
     {
         if(isweap(weap) && weap >= W_OFFSET && weap < W_ALL)

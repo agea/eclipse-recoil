@@ -2463,6 +2463,15 @@ namespace client
                     bool proceed = t && ((SPHY_SERVER&(1<<st)) || (t != game::player1 && !t->ai));
                     switch(st)
                     {
+                        case SPHY_PRIMEDDROP:
+                        {
+                            int weap = getint(p), fuse = getint(p), id = getint(p);
+                            if(!proceed || !csgopenweapons || !isweap(weap) || fuse <= 0 || id >= 0) break;
+                            projs::dropprimed(t, weap, fuse, id, t == game::player1 || t->ai);
+                            t->weapammo[weap][W_A_CLIP] = max(t->weapammo[weap][W_A_CLIP]-W2(weap, ammosub, false), 0);
+                            t->setweapstate(weap, W_S_IDLE, 0, lastmillis, 0, true);
+                            break;
+                        }
                         case SPHY_CLIMB: case SPHY_CLIMBEND:
                         {
                             getint(p); // server event timestamp; remote animation uses the local clock
