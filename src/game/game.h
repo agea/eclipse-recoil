@@ -5,7 +5,7 @@
 #include "mappackage.h"
 
 #define VERSION_GAMEID "fps"
-#define VERSION_GAME 283
+#define VERSION_GAME 284
 #define VERSION_DEMOMAGIC "RED_ECLIPSE_DEMO"
 
 #define MAXAI 256
@@ -325,7 +325,7 @@ ENUM_VAR(IM_T_ROLLER, (1<<IM_T_JUMP)|(1<<IM_T_WALLRUN)|(1<<IM_T_VAULT));
 #define SPHY_ENUM(en, um) \
     en(um, Jump, JUMP) en(um, Boost, BOOST) en(um, Dash, DASH) en(um, Slide, SLIDE) en(um, Launch, LAUNCH) en(um, Melee, MELEE) en(um, Kick, KICK) en(um, Grab, GRAB) \
     en(um, Wallrun, WALLRUN) en(um, Vault, VAULT) en(um, Pound, POUND) en(um, Material, MATERIAL) en(um, Prize, PRIZE) en(um, Switch, SWITCH) en(um, Extinguish, EXTINGUISH) \
-    en(um, Buff, BUFF) en(um, Hacked, HACKED) en(um, Climb, CLIMB) en(um, ClimbEnd, CLIMBEND) en(um, Max, MAX)
+    en(um, Buff, BUFF) en(um, Hacked, HACKED) en(um, Climb, CLIMB) en(um, ClimbEnd, CLIMBEND) en(um, Fall, FALL) en(um, Max, MAX)
 ENUM_DLN(SPHY);
 ENUM_VAR(SPHY_SERVER, (1<<SPHY_EXTINGUISH)|(1<<SPHY_BUFF)|(1<<SPHY_HACKED));
 
@@ -504,6 +504,12 @@ struct demoheader
 };
 #include "player.h"
 #include "vars.h"
+
+static inline int csgopenfallhurt(float speed)
+{
+    if(!G(csgopenfalldamage) || speed <= G(csgopenfallspeed)) return 0;
+    return int(ceilf(min((speed-G(csgopenfallspeed))*G(csgopenfallscale), 10000.0f)));
+}
 
 static inline const weaptypes &weaponvisual(int weap)
 {

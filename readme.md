@@ -60,6 +60,11 @@ complete custom-map ZIPs to Eclipse Recoil clients automatically. Downloaded
 maps are verified and cached in the client profile. See the development guide
 for the current loopback HTTP setup and validation results.
 
+The TDM preset also applies fall damage to humans and bots above a configurable
+vertical impact-speed threshold; normal jumps remain safe. Clients and servers
+require a rebuild and restart together for protocol 284. See the
+[fall-damage rules](doc/csgopen/gameplay.md#fall-damage).
+
 ## Licensing and attribution
 
 Eclipse Recoil includes third-party engine code and assets under their

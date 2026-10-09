@@ -424,6 +424,14 @@ SERVER_OBJS = \
     engine/server-standalone.o \
     game/server-standalone.o
 
+ifeq (1,$(CSGOPEN_FALL_TEST))
+    ifeq ($(APPSERVER),$(APPNAME)_server)
+        $(error CSGOPEN_FALL_TEST requires a separate APPSERVER path)
+    endif
+    SERVER_OBJS := $(filter-out game/server-standalone.o,$(SERVER_OBJS)) tests/csgopenfallserver-standalone.o
+    tests/csgopenfallserver-standalone.o: game/server.cpp game/game.h game/vars.h game/weapons.h
+endif
+
 LIBENET = enet/libenet.a
 
 GENKEY_OBJS = shared/genkey.o shared/crypto-standalone.o

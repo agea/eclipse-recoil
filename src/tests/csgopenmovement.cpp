@@ -5,6 +5,27 @@ namespace movementtest
 {
     int failures = 0, flattime = 0;
 
+    ICOMMAND(0, falljump, "i", (int *pressed),
+    {
+        game::player1->action[AC_JUMP] = *pressed != 0;
+        game::player1->actiontime[AC_JUMP] = lastmillis;
+    });
+
+    ICOMMAND(0, falldrop, "i", (int *speed),
+    {
+        gameent *d = game::player1;
+        if(d->state != CS_ALIVE) return;
+        cleardynentcache();
+        d->o = vec(100, 80, 512+d->height+0.1f);
+        d->vel = vec(0, 0, 0);
+        d->falling = vec(0, 0, -float(*speed));
+        d->physstate = PHYS_FALL;
+        d->airmillis = max(lastmillis-100, 1);
+        d->move = d->strafe = 0;
+        d->resetinterp();
+        conoutf(colourwhite, "FALL_DROP SPEED %d HEALTH %d", *speed, d->health);
+    });
+
     void check(bool ok, const char *name)
     {
         if(!ok) failures++;

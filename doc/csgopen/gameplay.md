@@ -633,3 +633,36 @@ to fill to two participants, or use `/botbalance 2` from an authorized client.
 The bot limit and existing bot behavior remain available. Preset initialization
 reapplies the default on restart; persistent bot-enabled deployments should
 place their override after the preset in their server startup configuration.
+
+
+### Fall damage
+
+The CSGOpen TDM preset enables `sv_csgopenfalldamage 1` for humans and bots.
+The original profile defaults to zero. The server synchronizes the enable flag,
+`sv_csgopenfallspeed` (100 world units/second) and `sv_csgopenfallscale` (1 health
+point per excess world unit/second). These are prototype values, not a claim
+of matching Counter-Strike's damage curve.
+
+On transition from falling/sliding to a supported floor or walkable slope, the
+actor's owning client reports its downward vertical speed before collision,
+rounded up to the network's integer velocity unit. Horizontal speed is ignored.
+The server queues a timed event, checks ownership, live state, actor type,
+spawn time, duplicate timestamps, climb state and speed bounds, then applies
+`ceil(max(speed - safe_speed, 0) * scale)` health damage through the normal
+damage/death messages. Weapon `damagescale` and `damageself` do not reduce or
+disable environmental fall damage. Impact speed remains client reported, as
+with the existing client physics events; this is not server-side collision
+reconstruction or an anti-cheat system.
+
+At the default settings, speed 100 is harmless, 150 costs 50 health and 200
+costs 100 health. Natural movement may increase a seeded speed during its final
+physics step. Ground jumps and small steps stay below the threshold. Water or
+lava at at least half submersion suppresses this impact damage; existing lava
+and material damage remain active. Ladder attachment, floating, prediction of
+remote actors and automatic climbing do not send impact events. Each landing
+transition reports at most once, including walkable slopes. Fatal impacts use
+a fall obituary and the ordinary death/respawn path. Crossing the map's death
+plane retains its existing immediate death behavior.
+
+Protocol 284 adds `SPHY_FALL` and `HIT_FALL`. Rebuild and restart clients and
+servers together; no map regeneration is required.

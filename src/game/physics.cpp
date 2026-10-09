@@ -1692,6 +1692,7 @@ namespace physics
             vec prevel = vec(d->vel).add(d->falling);
             float mag = prevel.magnitude();
             int collisions = 0, timeinair = d->airtime(lastmillis);
+            bool airborne = d->physstate == PHYS_FALL || d->physstate == PHYS_SLIDE;
 
             vel.mul(1.0f / moveres);
 
@@ -1699,6 +1700,16 @@ namespace physics
             {
                 if(!move(d, vel, local)) { if(++collisions < 5) i--; }
                 if(gameent::is(d) && ((gameent *)d)->climbelapsed >= 0) break;
+            }
+
+            if(local && gameent::is(d) && airborne && d->physstate >= PHYS_SLOPE)
+            {
+                gameent *e = (gameent *)d;
+                // Use vertical impact speed before collision; horizontal motion is harmless.
+                int speed = int(ceilf(clamp(-prevel.z, 0.0f, 1000.0f)*DVELF));
+                if(e->state == CS_ALIVE && e->actortype < A_ENEMY && !e->climbing &&
+                    !laddercheck(e) && !liquidcheck(e, 0.5f) && csgopenfallhurt(speed/DVELF))
+                    client::addmsg(N_SPHY, "ri4", e->clientnum, SPHY_FALL, lastmillis-game::maptime, speed);
             }
 
             if(gameent::is(d) && !d->airmillis)

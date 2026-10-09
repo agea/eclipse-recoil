@@ -75,7 +75,7 @@ the climb and then take their normal draw time. Ground jumps use
 `impulsejump=1.1` instead of 1.5. Clearance and a supported landing are required.
 These settings apply across maps and are synchronized by the server; the
 original profile keeps automatic traversal disabled. The network protocol is
-now 283, so update clients and servers together. See [movement rules](gameplay.md#movimento)
+now 284, so update clients and servers together. See [movement rules](gameplay.md#movimento)
 and [native checks](validation.md#automatic-obstacle-traversal-and-lower-jumps-2026-10-05).
 
 The TDM proximity mine recognizes valid contact normals on imported triangle
@@ -99,6 +99,13 @@ Grounded TDM movement additionally checks this frame's supported destination
 across seams within the map stair height, without requiring the farther climb
 probe to find a tread. It also tries the slope tangent when entering a walkable
 bevel from a flat tread. The swept body path and the normal walkable-slope limit still apply.
+
+The TDM preset enables fall damage for humans and bots. Downward impact speeds
+up to 100 world units/second are safe; each excess unit costs one health point.
+Normal ground jumps remain safe. Water at half submersion cushions the landing,
+and automatic climbing does not cause fall damage. The original profile leaves
+it disabled. Rebuild and restart clients and servers together for protocol 284;
+map packages do not need regeneration. See [fall damage](gameplay.md#fall-damage).
 
 ### Quake 3 / Urban Terror map converter
 

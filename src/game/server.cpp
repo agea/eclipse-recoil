@@ -85,6 +85,12 @@ namespace server
         void process(clientinfo *ci);
     };
 
+    struct fallevent : timedevent
+    {
+        int speed;
+        void process(clientinfo *ci);
+    };
+
     struct cookevent : timedevent
     {
         int id, weap, etype, offtime;
@@ -241,7 +247,9 @@ namespace server
 
         int warnings[WARN_MAX][2];
 
-        servstate() : aireinit(0), lasthurt(0)
+        int lastfall;
+
+        servstate() : aireinit(0), lasthurt(0), lastfall(-1)
         {
             loopi(WARN_MAX) loopj(2) warnings[i][j] = 0;
             loopi(W_R_MAX)
@@ -301,6 +309,7 @@ namespace server
         {
             baseent::reset();
             rewards[1] = lasthurt = 0;
+            lastfall = -1;
             resetresidualowner();
             clientstate::respawn(millis);
         }
@@ -4535,7 +4544,7 @@ namespace server
         if(smode && !smode->damage(m, v, realdamage, weap, realflags, fromweap, fromflags, material, hitpush, hitvel, dist)) { nodamage++; }
         mutate(smuts, if(!mut->damage(m, v, realdamage, weap, realflags, fromweap, fromflags, material, hitpush, hitvel, dist)) { nodamage++; });
 
-        if(!(realflags&HIT_MATERIAL) && v->actortype < A_ENEMY)
+        if(!(realflags&HIT_MATERIAL) && !(weap == -1 && realflags&HIT_FALL) && v->actortype < A_ENEMY)
         {
             if(v == m && !G(damageself)) nodamage++;
             else if(isghost(m, v)) nodamage++;
@@ -5212,6 +5221,18 @@ namespace server
                 ci->weapammo[weap][W_A_STORE] = 0;
             }
         }
+    }
+
+    void fallevent::process(clientinfo *ci)
+    {
+        if(!G(csgopenfalldamage) || ci->state != CS_ALIVE || ci->actortype >= A_ENEMY ||
+            ci->climbing || millis < ci->lastspawn || millis <= ci->lastfall ||
+            speed < 0 || speed > int(1000*DVELF)) return;
+        ci->lastfall = millis;
+        int material = ci->inmaterial&MATF_VOLUME;
+        if((material == MAT_WATER || material == MAT_LAVA) && ci->submerged >= 0.5f) return;
+        int damage = csgopenfallhurt(speed/DVELF);
+        if(damage) dodamage(ci, ci, damage, -1, HIT_FALL, -1, 0, 0);
     }
 
     void climbevent::process(clientinfo *ci)
@@ -6796,6 +6817,16 @@ namespace server
                             }
 
                             break; // does not get sent to clients
+                        }
+                        case SPHY_FALL:
+                        {
+                            int stamp = getint(p), speed = getint(p);
+                            if(!proceed || !G(csgopenfalldamage) || cp->state != CS_ALIVE || cp->needsresume) break;
+                            fallevent *ev = new fallevent;
+                            ev->millis = cp->getmillis(gamemillis, stamp);
+                            ev->speed = speed;
+                            cp->addevent(ev);
+                            break;
                         }
                         case SPHY_CLIMB: case SPHY_CLIMBEND:
                         {

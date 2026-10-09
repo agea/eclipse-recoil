@@ -2584,3 +2584,49 @@ Executed checks in `.csgopen/dedicated-bullet-fx-20261009/`:
 
 Reconnect the game to receive the repaired server values. No new build or map
 regeneration is required for this configuration repair.
+
+
+### TDM fall damage (2026-10-09)
+
+Fall damage is enabled only by the TDM preset and defaults off in the original
+profile. The owning client detects a falling-to-supported transition using
+vertical speed before collision; the server validates the timed event and
+applies health damage and death messages. The preset uses safe speed 100 and
+scale 1, independently of weapon damage scale. Water at half submersion and
+climbing suppress fall damage. Protocol 284 requires updated clients and servers.
+
+Executed checks in `.csgopen/fall-damage-20261009/`:
+
+- Native prerequisites and production client/server build pass.
+  `.csgopen/logs/fall-build.log` records the successful production build.
+- The opt-in dedicated server test reports `FALL_DONE FAILURES 0` in
+  `unit-server.log`: threshold, damage amount, duplicate/old-life events,
+  spectator/dead/climbing states, water, invalid velocities, disabled feature,
+  bots and lethal death processing. The final run sets weapon self-damage to
+  zero and still applies fall damage. The command is absent from production
+  binaries; `test-build-final.log` records its separate build.
+- A separate integration client connects to the production loopback server on
+  the existing flat movement fixture. `network-client.log` reports
+  `FALL_NETWORK_DONE FAILURES 0`: speed 80 retains 100 health, an ordinary
+  ground jump retains 100 health, a seeded speed 150 lands with 49 health
+  (the final gravity step quantizes impact to 151), waiting does not repeat
+  the damage, and speed 220 causes death. The opt-in client commands only
+  position the actor and press/release jump; production physics generates the
+  landing event and the production server computes the resulting damage.
+- The rebuilt production client passes the canonical dedicated-loopback smoke
+  on Echo: `SMOKE_DONE FAILURES 0` in `smoke.log`, including the three new
+  synchronized fall settings. Temporary test servers and clients are stopped.
+- `git diff --check` passes.
+
+The initial sandboxed runtime could not access the display or bind a socket;
+these were not gameplay results. The first production compile exposed the
+client-only `isliquid` helper in the standalone server; explicit material checks
+fixed it. The initial opt-in test macro called its own generated `run` method;
+qualifying `falltest::run` fixed the harness before successful checks.
+
+Code inspection covers walkable-slope transitions, remote prediction and ladder
+exclusion. Manual checks on converted-map slopes and deep-water landings remain
+open. Normal jumping and flat-floor damaging/lethal landings were executed online.
+No map assets or packages changed. Restart clients and servers together to use
+the rebuilt binaries; the existing live LAN server was not restarted by these
+tests.

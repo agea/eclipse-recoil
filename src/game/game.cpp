@@ -2102,7 +2102,7 @@ namespace game
 
     void hiteffect(int weap, int flags, int fromweap, int fromflags, int damage, gameent *d, gameent *v, vec &dir, vec &vel, float dist, bool local)
     {
-        bool burnfunc = burn(d, weap, flags), bleedfunc = bleed(d, weap, flags), shockfunc = shock(d, weap, flags), corrodefunc = corrode(d, weap, flags), material = flags&HIT_MATERIAL;
+        bool burnfunc = burn(d, weap, flags), bleedfunc = bleed(d, weap, flags), shockfunc = shock(d, weap, flags), corrodefunc = corrode(d, weap, flags), material = flags&(HIT_MATERIAL|HIT_FALL);
 
         if(!local || burnfunc || bleedfunc || shockfunc || corrodefunc || material)
         {
@@ -2409,6 +2409,7 @@ namespace game
         if(d == v)
         {
             if(flags&HIT_SPAWN) obitctx = obitspawn;
+            else if(flags&HIT_FALL) obitctx = *obitfall ? obitfall : "fell to their death";
             else if(flags&HIT_TOUCH) obitctx = *obittouch ? obittouch : obitsplat;
             else if(flags&HIT_CRUSH) obitctx = *obitcrush ? obitcrush : obitsquish;
             else if(flags&HIT_SPEC) obitctx = obitspectator;
