@@ -1459,7 +1459,7 @@ int setupserversockets()
         enet_socket_set_option(pongsock, ENET_SOCKOPT_NONBLOCK, 1);
         if(serverlanport)
         {
-            address.port = LAN_PORT;
+            address.port = serverlanport;
             lansock = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
             if(lansock != ENET_SOCKET_NULL && (enet_socket_set_option(lansock, ENET_SOCKOPT_REUSEADDR, 1) < 0 || enet_socket_bind(lansock, &address) < 0))
             {

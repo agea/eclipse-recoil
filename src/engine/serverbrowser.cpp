@@ -331,6 +331,14 @@ void checkresolver()
     }
 }
 
+// Query discovery explicitly without fetching the public master list.
+ICOMMAND(0, scanlan, "", (),
+{
+    searchlan = 1;
+    if(!serverlanport) setvar("serverlanport", LAN_PORT);
+    pingservers();
+});
+
 static int lastreset = 0;
 
 void checkpings()
@@ -505,7 +513,7 @@ COMMAND(IDF_NOECHO, updatefrommaster, "");
 
 void updateservers()
 {
-    if(!reqmaster) updatefrommaster();
+    if(!reqmaster && !searchlan) updatefrommaster();
     refreshservers();
     if(autosortservers && !pausesortservers) sortservers();
     intret(servers.length());

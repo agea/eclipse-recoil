@@ -343,8 +343,9 @@ scripts/csgopen/dev.sh original
 scripts/csgopen/dev.sh tdm
 ```
 
-The second command starts TDM on **Echo**, with a minimum of two participants
-in total, including humans. A bot makes an initial solo test possible. Close
+The second command starts TDM on **Echo**, with no automatic bots. To explicitly
+enable filling to two participants, use `/botbalance 2` on an authorized client
+or set `sv_botbalance 2` after loading the server preset. Close
 the client before switching profiles. Choose a player name when prompted,
 then leave spectator mode through the menu or `/spectate 0` in the console.
 `/tdm echo` is an alias present in this version. To use another included map:
@@ -445,6 +446,18 @@ effects. All enabled shots stop on impact without ricochet or wall penetration. 
 the SMG firing sound; the original profile retains its own effects and sounds. Spread is provisional; recoil and reload timing are tuned per weapon. The shotgun currently has no CS:GO distance falloff; armor,
 penetration and Source recoil patterns remain pending. This is a functional
 arsenal prototype rather than a complete weapon simulation.
+
+The TDM client makes bullet and pellet trails visible immediately, using short,
+thin tracers: 12-unit trails, 50 ms bullet particles and 20 ms pellets.
+The AK-47 has an explicit nonzero trail length, and former energy slots no
+longer inherit beam-length trails.
+These presentation settings preserve shot physics and the weapon-only
+first-person view; original-profile trails retain their upstream values.
+The native renderer refreshes cached muzzle/projectile effect references after
+effect reloads so trails and impact marks keep their correct definitions.
+The server preset sets effect scale and colour explicitly. Client-only variable
+lookups must not be used in dedicated configuration: they become zero there,
+making both tracers and impact stains invisible despite correct effect types.
 
 For all-primary spawn and permission checks, run the dedicated server and:
 
@@ -580,8 +593,10 @@ In another terminal, run `scripts/csgopen/dev.sh tdm`, then use the game console
 
 ```text
 /connect 127.0.0.1 28801
-/spectate 0
 ```
+
+Choose Alpha or Omega in the team menu before joining. `/spectate 0` remains
+available for diagnostics with automatic team assignment.
 
 The dedicated server uses the same preset, binds to **127.0.0.1**, and uses
 UDP port 28801 for gameplay and 28802 for information queries. LAN discovery,
@@ -604,9 +619,35 @@ gameplay, UDP 28802 for information, UDP 28799 for LAN discovery, and TCP
 28888 for map packages. Public master registration remains disabled.
 The launcher writes its configuration on each run; stop it with Ctrl-C.
 
-After starting the TDM client, run `/serverlanport 28799` and `/searchlan 1`
-in its console, then refresh the server browser. Allow incoming connections
-to the server if the macOS firewall asks. Clients must share the LAN.
+Start the dedicated server with `scripts/csgopen/server-lan.sh` for other
+computers on the LAN. `scripts/csgopen/dev.sh server` is deliberately bound to
+loopback and can only be reached from the same computer.
+
+In the updated TDM client, open **Play Online**, click **Find LAN servers**,
+and select the desired server from the list. The client preset enables LAN
+discovery automatically, even after older persisted settings. Searching does
+not connect to a server; entries and the connection panel show the destination
+address and gameplay port. LAN discovery does not fetch the public master list;
+**Refresh list** still explicitly requests that list.
+
+If broadcast discovery is unavailable, use **Connect by IP** with the host
+computer's LAN IPv4 address and game port `28801` (for example,
+`192.168.1.10:28801`), or `/connect 192.168.1.10 28801` in the console.
+For a server on the same computer, use `127.0.0.1` and port `28801`.
+Allow incoming connections to the server if the macOS firewall asks.
+Clients must share the LAN and use a compatible updated binary. The host must
+run the updated client/server configuration; already installed release apps
+need a rebuilt or new release package to include these changes.
+
+TDM players connect as spectators and see **Pick your team** once the map
+and server player state are ready, before joining the match. This also works
+when joining from an active offline match, reconnecting, or using the console,
+and does not depend on the equipment menu being enabled. Choose **Alpha** or **Omega**, or remain in **Spectate**. The menu
+shows the connected server's IP and port. The existing server team request
+performs the join; normal balance, capacity and spectator restrictions still
+apply. **Change team** in the main menu opens the same chooser later. Player
+Setup remains available for equipment selection. The original client profile
+retains its existing loadout flow.
 
 ### Rotation, voting, and automatic map packages
 

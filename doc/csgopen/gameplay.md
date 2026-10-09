@@ -591,3 +591,45 @@ This prevents leg animations from obscuring the view on stairs after the
 converted-map dimension changes. The option affects local rendering only;
 actor dimensions, movement, collision, third-person player models and world
 shadows remain unchanged. The original gameplay profile retains its defaults.
+
+### Fast projectile trail visibility (2026-10-09)
+
+The TDM client enables `csgopenbulletfx`, a local effect-definition switch that
+reloads effects and remains active when effect detail is changed. Bullet and
+shotgun pellet trails have no initial opacity ramp in this profile: the upstream
+50/100 ms ramps can outlast nearby shots travelling at 10,000 units/second.
+Bullet particles last 50 ms with width 0.15 and blend 0.85; pellet particles
+last 20 ms with width 0.1 and blend 0.5. The initial wider revision was too
+prominent, while the subsequent 20/8 ms revision was too faint. This changes existing
+particles, without adding emitters. Original
+profiles retain upstream effect values. The converted AK-47 (Plasma slot) also
+sets its visual trail length to 12 instead of its inherited zero, preventing
+the flare endpoints from collapsing. Other conventional shots, including scoped
+AWP, also use length 12 instead of inherited energy-beam lengths. Projectile
+speed, collision, damage and
+the first-person weapon-only view are unchanged.
+
+Effect definitions have a revision counter. Projectile and muzzle caches refresh
+when this counter changes, including after `reloadfx` and effect-detail changes.
+Previously they retained numeric indices into the old definition table, so a
+valid-looking handle could identify an unrelated effect and lose bullet trails
+or impact stains. Cache refresh runs once per revision, rather than looking up
+names on every shot.
+
+Dedicated configuration uses explicit `fxscale 1` and bullet colour `0xFF9C10`.
+The former `$smgcolour` and `$smgfxscale1` lookups only existed in the client;
+a standalone server interpreted them as zero and synchronized zero scale to
+players. Both particle size and impact stain radius were therefore zero. This
+also explains why local firing verification could succeed while LAN firing
+remained invisible. Explicit values repair profiles previously saved with zero
+scale. The multiplayer smoke asserts all eight scales and six shared colours.
+
+### Bot opt-in (2026-10-09)
+
+The TDM preset sets `sv_botbalance 0` and `sv_botoffset 0`: offline and dedicated
+matches do not automatically add bots. Both dedicated launchers load this
+preset. An administrator may explicitly set `sv_botbalance 2` after loading it
+to fill to two participants, or use `/botbalance 2` from an authorized client.
+The bot limit and existing bot behavior remain available. Preset initialization
+reapplies the default on restart; persistent bot-enabled deployments should
+place their override after the preset in their server startup configuration.

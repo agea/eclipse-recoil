@@ -92,6 +92,7 @@ namespace projs
     };
 
     static fx::FxHandle projfx[FX_P_TYPES * PROJ_NUM_FX_SUBTYPES];
+    static uint projfxrevision = ~0U;
     #define PROJFXINDEX(type, subtype) (((type) * PROJ_NUM_FX_SUBTYPES) + (subtype))
 
     void mapprojfx()
@@ -115,10 +116,13 @@ namespace projs
             formatstring(slotname, "%s%s", typeprefixes[i], subtypes[j]);
             projfx[PROJFXINDEX(i, j)] = fx::getfxhandle(slotname);
         }
+        projfxrevision = fx::defrevision;
     }
 
     static inline fx::FxHandle getprojfx(int fxtype, int subtype)
     {
+        // Effect detail reloads rebuild slots, changing their numeric indices.
+        if(projfxrevision != fx::defrevision) mapprojfx();
         return fxtype >= 0 && fxtype < FX_P_TYPES &&
             subtype >= 0 && subtype < PROJ_NUM_FX_SUBTYPES ?
                 projfx[PROJFXINDEX(fxtype, subtype)] : fx::FxHandle();

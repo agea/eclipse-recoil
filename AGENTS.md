@@ -7,6 +7,8 @@ CS:GO movement or weapons.
 - Work only in this repository; preserve the original gameplay.
 - The CSGOpen TDM preset enables friendly fire for humans and bots, with a
   team damage multiplier of 1, as requested after the initial milestone.
+- TDM servers start without bots (`sv_botbalance 0`, `sv_botoffset 0`). Bot
+  filling must be explicitly enabled after loading the preset.
 - Always write and update README files and `AGENTS.md` in English. This includes
   `README.md` and `doc/csgopen/README.md`. Open
   README files with Eclipse Recoil's overall purpose before current milestone details.

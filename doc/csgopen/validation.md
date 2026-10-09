@@ -2368,3 +2368,219 @@ assertions and reports `SMOKE_DONE FAILURES 0`. The test server was stopped.
 Native prerequisites and `git diff --check` pass. This verifies runtime settings
 and the renderer path; manual visual confirmation on Safehouse stairs remains
 open. Relaunch the TDM client to apply the preset after persisted preferences.
+
+### LAN destination selection and pre-match teams (2026-10-09)
+
+The TDM preset now enables client discovery on UDP 28799 after persisted
+preferences. **Find LAN servers** sends a discovery query without starting an
+ENet connection or fetching the public master list. **Connect by IP** accepts
+an explicit host, gameplay port and optional password. Browser entries and the
+connection panel identify the chosen host/port. The server discovery socket
+now binds the configured `serverlanport`, rather than always using `LAN_PORT`.
+
+The TDM loadout callback and successful browser connection show the existing
+team chooser for a spectator in team Deathmatch. Alpha/Omega labels and the
+connected endpoint are visible. Existing server team requests handle spawning;
+team balancing and access restrictions remain authoritative. The original
+profile keeps its previous loadout callback behavior.
+
+Executed checks, with logs under `.csgopen/lan-team-20261009/`:
+
+- Native client and server build passed (`.csgopen/logs/lan-build.log`).
+- A dedicated server bound exclusively to `127.0.0.1:28801`, with public
+  registration and HTTP disabled, answered an explicit discovery query sent
+  to the non-default loopback discovery port 28999. Its response originated
+  from the correct information port 28802.
+- The native client verified preset discovery settings, scanning without a
+  connection, browser protocol and gameplay port, an explicit connection to
+  `127.0.0.1:28801`, and spectator state with `ui_gameui_team` open before
+  joining. Requests for Omega and then Alpha both joined the requested team;
+  the first join reached the alive state. `client.log` reports
+  `LAN_TEAM_DONE FAILURES 0`.
+- The full preset smoke reports `SMOKE_DONE FAILURES 0` in `smoke.log`.
+  The test server was stopped after the checks.
+- Visual review of `team-review.0001.png`, `browser-review.0001.png` and `direct.0001.png`
+  confirms the team chooser, endpoint display, LAN search and direct-address
+  controls. Team names use separate captions because the standard button
+  widget renders an icon instead of its label when an icon is supplied.
+- `bash -n scripts/csgopen/server-lan.sh` and `git diff --check` passed.
+
+The first browser assertion ran before the configured ping interval and failed;
+the rerun waits for the query response and passes. Initial screenshots coincided
+with shader compilation, so a separate visual review waits for map readiness
+and a rendered frame before capturing the menus. No broad-interface LAN server
+was launched for these tests. Discovery between separate computers, firewall
+behavior, and package downloads across the actual LAN remain manual checks.
+Installed release apps need a new package to include the updated code/config.
+
+### Team chooser after joining from an offline match (2026-10-09)
+
+The initial LAN check did not cover the development launcher's active offline
+match. Code inspection found that `client::gameconnect()` hides the current UI,
+which clears the connection panel before its success-render branch can open
+the chooser. Map loading also precedes the welcome packet's spectator snapshot,
+so checking spectator state directly in the loadout callback was insufficient.
+
+The TDM chooser now has an independent map-load callback. It waits for
+`waiting 0` to report readiness, then opens the chooser for the initial online
+team Deathmatch spectator. A per-connection generation invalidates callbacks
+on disconnect/reconnect; a prompted flag avoids repeating the prompt at later
+map changes. The first online loadout event defers to this flow. Original-profile
+callbacks remain unchanged. Team captions are laid out around the original
+button helper, retaining its existing click-callback interpolation depth.
+
+Executed checks in `.csgopen/offline-lan-join-20261009/`:
+
+- Started a native offline TDM match using the launcher's `-xtdm echo` order,
+  verified the player was alive, then joined the dedicated loopback server on
+  port 28981 through the same `gameui_online_connect` action as the browser.
+- With `showloadoutmenu 0`, verified spectator state, readiness, the visible
+  `ui_gameui_team` panel and successful Omega spawn. Verified that another
+  map-load callback did not replace the active player's UI.
+- Reconnected while previously alive, verified a fresh spectator/team prompt,
+  ignored a callback from the old connection, and joined Alpha.
+  `client.log` reports `OFFLINE_LAN_JOIN_DONE FAILURES 0`.
+- Visually inspected `client/offline-to-lan-team.png`; the team chooser displays
+  the correct endpoint and Alpha/Omega/Spectate captions after the offline join.
+- The full `config/csgopen/smoke.cfg`, with only its connection port adjusted to
+  the isolated loopback server, reports `SMOKE_DONE FAILURES 0` in `smoke.log`.
+  The server was stopped afterwards. `git diff --check` passes.
+
+An initial regression harness attempted `tdm echo` inside `autoexec.cfg` before
+client startup completed and timed out; the corrected run uses the launcher's
+post-startup command order. These changes are CubeScript only and require a
+client restart to reload the UI; no new native build is needed.
+
+### Fast bullet trail visibility (2026-10-09)
+
+Code inspection found two presentation issues independent of first-person body
+visibility: the Plasma/AK-47 slot inherited zero visual trail length, and bullet
+and pellet effects ramped opacity over 50/100 ms, longer than many nearby TDM
+shots at 10,000 units/second. The TDM preset now assigns AK-47 length 20; its
+client enables immediate, slightly wider trails with short particle fades.
+Original-profile effect values remain behind the default-disabled local switch.
+Only effect presentation and the visual trail endpoints change.
+
+Executed checks in `.csgopen/bullet-trails-20261009/`:
+
+- Native prerequisites and `git diff --check` pass.
+- The production dedicated-loopback smoke reports `SMOKE_DONE FAILURES 0` in
+  `smoke.log`, including the local trail switch, synchronized AK-47 length and
+  retained weapon-only first-person view. The server was stopped afterward.
+- The native effect probe creates bullet and pellet emitters, reloads effect
+  detail, and switches the TDM option off/on without registration errors.
+  `probe-visible.log` reports switch values 1, 0, 1. The captured screenshots
+  confirm an unobstructed game view, but do not clearly resolve the distant
+  test trail; they are not proof of normal firing visibility. Manual firing
+  checks at multiple distances remain open.
+
+Restart the TDM client and dedicated server to reload client effects and weapon
+settings. No native rebuild or map regeneration is required.
+
+### Subtle tracers and explicit bot enablement (2026-10-09)
+
+Manual feedback found the first trail revision too conspicuous. TDM now uses
+6-unit visual trails for all conventional primary shots and scoped AWP, including
+former energy slots with inherited lengths of 512/1024. Bullet particles use
+20 ms fade, width 0.12 and blend 0.65; pellets use 8 ms, width 0.075 and blend
+0.35. Immediate visibility and the AK-47 nonzero-length correction remain.
+No shot speed, damage, collision or map geometry changes. The original profile
+retains upstream effect parameters. The TDM preset now disables automatic bots
+with balance/offset zero; administrators can explicitly override balance.
+
+Executed checks in `.csgopen/subtle-trails-no-bots-20261009/`:
+
+- `smoke-final.log` reports `SMOKE_DONE FAILURES 0`, including all eight visual
+  lengths, default bot settings and zero connected bots at the initial match,
+  respawn and map change.
+- A separate dedicated loopback server loads TDM then explicitly sets balance
+  to two. `explicit-bots.log` reports `EXPLICIT_BOTS_PASS` and one bot alongside
+  the human, confirming opt-in remains functional. Both servers were stopped.
+- Prerequisites, launcher shell syntax and `git diff --check` pass.
+
+The first smoke used an unavailable dynamic float-query command in the test
+assertions and failed 21 checks; explicit variable assertions corrected the
+harness without changing gameplay. The first opt-in server attempt overlapped
+the smoke server's query port; the successful run uses a distinct port pair.
+Manual visual confirmation of the reduced trails in normal firing remains open.
+Restart client/server to load these configuration changes; no build or map
+regeneration is necessary.
+
+### Effect-cache repair and firing verification (2026-10-09)
+
+Further manual feedback reported invisible trails and missing wall impacts.
+Inspection found that projectile and muzzle tables cached numeric FX slots
+across `fxcleardefs`; changing effect detail can reorder those slots. A handle
+can remain valid while referring to an unrelated definition. The engine now
+increments a definition revision on clear, and each cache refreshes once when
+that revision changes. This avoids per-shot name lookups. Trail presentation
+uses length 12, bullet fade 50 ms/width 0.15/blend 0.85, and pellet fade
+20 ms/width 0.1/blend 0.5, retaining immediate emission and original-profile
+parameters. Bot opt-in behavior is unchanged.
+
+Executed checks in `.csgopen/bullet-fx-repair-20261009/`:
+
+- Production client/server rebuilt natively (`build.log`). A separate opt-in
+  integration client (`test-build-final.log`) verifies both bullet/pellet LIFE
+  definitions are particles, DESTROY definitions are stains, and the muzzle
+  points to its correct definition. Initial load, detail 0/2/1 and explicit
+  reload each report `BULLET_FX_DONE FAILURES 0` (25 checks per run).
+- Actual sustained SMG firing on Echo consumed 14 rounds and left visible wall
+  bullet marks (`probe/impacts.png`). This is a normal weapon/projectile path,
+  rather than the previous synthetic `testfx` probe.
+- Actual sustained firing on converted Dust2 was captured both against a car
+  and against a wall. `probe/firing-570.0001.png` visibly resolves a short
+  orange tracer during fire; `probe/impacts.0002.png` resolves dark wall impact
+  marks after fire. `dust2-wall.log` confirms all reload checks remain clean.
+  These checks cover SMG and these surfaces, not every gun or converted wall.
+- The rebuilt production client passes the dedicated-loopback smoke with
+  `SMOKE_DONE FAILURES 0` in `smoke.log`, including zero bots and all updated
+  visual lengths. The test server was stopped. `git diff --check` passes.
+
+The opt-in command harness initially failed compilation because comma-separated
+declarations were inside an `ICOMMAND` macro body; moving the bodies to normal
+functions fixed it. No production build failed. Restart the client to use the
+new native effect-cache code and presentation configuration. Restart any
+dedicated server to load the updated trail lengths. Map regeneration is not
+required.
+
+### Dedicated-server zero-scale regression (2026-10-09)
+
+The previous offline visual checks did not reproduce the user's LAN problem.
+The actual LAN server log contains `Unknown alias lookup: smgcolour` and
+`smgfxscale1`: those unprefixed weapon identifiers are client-only. Dedicated
+execution therefore assigned scale and colour zero to six conventional firing
+modes. Particle size and impact stain radius both use this scale. Correct FX
+types and successful cache tests were insufficient to detect the problem.
+
+The arsenal preset now assigns explicit scale 1 and colour `0xFF9C10`, recovering
+even saved zero-scale profiles. No additional tracer tuning was done in this
+repair. The canonical smoke adds eight synchronized scale and six colour checks.
+
+Executed checks in `.csgopen/dedicated-bullet-fx-20261009/`:
+
+- `baseline-final.log` reproduces old standalone values `0.0 0.0 0.0 0`, then
+  shows `1.0 1.0 1.0 16751632` after loading the corrected preset in the same
+  process. The isolated server is bound to loopback and was stopped.
+- `server.log` loads the corrected configuration without unknown-alias errors.
+  The production network smoke reports `SMOKE_DONE FAILURES 0` in `smoke.log`,
+  including the new scale/colour assertions and zero bots.
+- A separate dedicated Dust2 match uses the user's saved primary slot 7.
+  `probe-client-final.log` records alive state 0, weapon 7, synchronized scale
+  1 and colour 16751632, ammunition 30 to 19, and `DEDICATED_FIRING_PASS`.
+  `probe-client/firing-570.0001.png` visibly resolves the orange tracer online.
+  The capture of impact marks is small; zero-radius failure and its recovery
+  are established by the dedicated values and the stain renderer's scale use.
+- The initial online visual harness ran before map readiness and the team
+  chooser interrupted its captures. The corrected harness waits for readiness
+  and a live actor, disables the chooser only in its test profile, and asserts
+  ammunition consumption. The first standalone diagnostic used unsupported
+  `quit` and overlapped the active LAN port after logging its values; the final
+  diagnostic uses a distinct loopback port and a controlled interrupt.
+- The actual LAN server was confirmed idle, its old log preserved in
+  `live-server-before.log`, and it was restarted with the same launcher, ports
+  and profile. The new log has no unknown weapon lookups. The LAN server remains
+  running; isolated test servers were stopped. `git diff --check` passes.
+
+Reconnect the game to receive the repaired server values. No new build or map
+regeneration is required for this configuration repair.

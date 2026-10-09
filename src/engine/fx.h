@@ -283,6 +283,7 @@ namespace fx
 
     extern FxHandle getfxhandle(const char *name);
     extern bool hasfx(const char *name);
+    extern uint defrevision;
 
     struct fxdef
     {

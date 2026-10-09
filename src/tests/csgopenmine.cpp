@@ -3,6 +3,52 @@
 
 namespace minetest
 {
+    void bulletfxcheck()
+    {
+        const char *names[] = { "FX_P_BULLET_LIFE", "FX_P_BULLET_DESTROY", "FX_P_PELLET_LIFE", "FX_P_PELLET_DESTROY" };
+        const int types[] = { FX_P_BULLET, FX_P_BULLET, FX_P_PELLET, FX_P_PELLET };
+        const int subtypes[] = { projs::PROJ_FX_LIFE, projs::PROJ_FX_DESTROY, projs::PROJ_FX_LIFE, projs::PROJ_FX_DESTROY };
+        int failed = 0;
+        loopi(4)
+        {
+            fx::FxHandle h = projs::getprojfx(types[i], subtypes[i]);
+            bool ok = h.isvalid() && !strcmp(h.get().getname(), names[i]) &&
+                h.get().type == (i%2 ? fx::FX_TYPE_STAIN : fx::FX_TYPE_PARTICLE);
+            if(!ok) failed++;
+            conoutf(colourwhite, "BULLET_FX_%s %s ACTUAL %s", ok ? "PASS" : "FAIL", names[i], h.isvalid() ? h.get().getname() : "missing");
+        }
+        fx::FxHandle muzzle = game::getweapfx(FX_W_MUZZLE4);
+        if(!muzzle.isvalid() || strcmp(muzzle.get().getname(), "FX_W_MUZZLE4")) failed++;
+        conoutf(colourwhite, "BULLET_FX_DONE FAILURES %d REVISION %u", failed, fx::defrevision);
+    }
+    ICOMMAND(0, bulletfxcheck, "", (), bulletfxcheck());
+
+    void bulletview()
+    {
+        gameent *d = game::player1;
+        vec dir;
+        float closest = 512, yaw = d->yaw;
+        loopi(16)
+        {
+            vecfromyawpitch(i*22.5f, 0, 1, 0, dir);
+            float dist = raycube(d->o, dir, 512, RAY_CLIPMAT|RAY_POLY);
+            if(dist > 24 && dist < closest) { closest = dist; yaw = i*22.5f; }
+        }
+        d->yaw = yaw;
+        d->pitch = 0;
+        d->move = d->strafe = 0;
+        d->action[AC_PRIMARY] = true;
+        conoutf(colourwhite, "BULLET_VIEW DISTANCE %.3f YAW %.3f", closest, yaw);
+    }
+    ICOMMAND(0, bulletview, "", (), bulletview());
+    ICOMMAND(0, bulletaim, "f", (float *yaw),
+    {
+        game::player1->yaw = *yaw;
+        game::player1->pitch = 0;
+        game::player1->action[AC_PRIMARY] = true;
+    });
+    ICOMMAND(0, bulletstop, "", (), game::player1->action[AC_PRIMARY] = false);
+
     int failures = 0;
 
     void check(bool ok, const char *name)

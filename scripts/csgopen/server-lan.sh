@@ -30,6 +30,7 @@ httpserver 1
 EOF
 
 echo "Server LAN: gioco UDP 28801, discovery UDP 28799, mappe TCP 28888."
-echo "Nella console client: /serverlanport 28799 e /searchlan 1, poi aggiornare la lista server."
+echo "Nel client: Play Online > Find LAN servers, poi selezionare il server."
+echo "In alternativa: Connect by IP con l’IP LAN di questo computer e porta 28801."
 exec "$BINARY" "-h$RUNTIME" "-p$ROOT/data/csgopen" \
     "-g$STATE/logs/server-lan.log" -sm -ss1 -sp28801

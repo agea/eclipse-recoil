@@ -30,6 +30,7 @@ namespace fx
     };
 
     static Slotmanager<fxdef> fxdefs;
+    uint defrevision = 0;
 
     FxHandle getfxhandle(const char *name) { return fxdefs[name]; }
     bool hasfx(const char *name) { return fxdefs.hasslot(name); }
@@ -607,6 +608,7 @@ namespace fx
     {
         clear();
         fxdefs.clear();
+        defrevision++;
     });
 
     ICOMMAND(0, fxend, "s", (char *name),

@@ -87,27 +87,35 @@ namespace game
 
     fx::FxHandle getweapfx(int type)
     {
-        static fx::FxHandle weapfx[FX_W_TYPES] =
+        static const char *names[FX_W_TYPES] =
         {
-            fx::getfxhandle("FX_W_MUZZLE1"),
-            fx::getfxhandle("FX_W_MUZZLE2"),
-            fx::getfxhandle("FX_W_MUZZLE3"),
-            fx::getfxhandle("FX_W_MUZZLE4"),
-            fx::getfxhandle("FX_W_MUZZLE5"),
-            fx::getfxhandle("FX_W_MUZZLE6"),
-            fx::getfxhandle("FX_W_FLAME"),
-            fx::getfxhandle("FX_W_AIRBLAST"),
-            fx::getfxhandle("FX_W_PLASMA1"),
-            fx::getfxhandle("FX_W_PLASMA2"),
-            fx::getfxhandle("FX_W_PLASMA_P"),
-            fx::getfxhandle("FX_W_ENERGY1"),
-            fx::getfxhandle("FX_W_ENERGY2"),
-            fx::getfxhandle("FX_W_ENERGY_P"),
-            fx::getfxhandle("FX_W_BEAM1"),
-            fx::getfxhandle("FX_W_BEAM2"),
-            fx::getfxhandle("FX_W_SPLASH1"),
-            fx::getfxhandle("FX_W_SPLASH2")
+            "FX_W_MUZZLE1",
+            "FX_W_MUZZLE2",
+            "FX_W_MUZZLE3",
+            "FX_W_MUZZLE4",
+            "FX_W_MUZZLE5",
+            "FX_W_MUZZLE6",
+            "FX_W_FLAME",
+            "FX_W_AIRBLAST",
+            "FX_W_PLASMA1",
+            "FX_W_PLASMA2",
+            "FX_W_PLASMA_P",
+            "FX_W_ENERGY1",
+            "FX_W_ENERGY2",
+            "FX_W_ENERGY_P",
+            "FX_W_BEAM1",
+            "FX_W_BEAM2",
+            "FX_W_SPLASH1",
+            "FX_W_SPLASH2"
         };
+
+        static fx::FxHandle weapfx[FX_W_TYPES];
+        static uint revision = ~0U;
+        if(revision != fx::defrevision)
+        {
+            loopi(FX_W_TYPES) weapfx[i] = fx::getfxhandle(names[i]);
+            revision = fx::defrevision;
+        }
 
         return type >= 0 && type < FX_W_TYPES ? weapfx[type] : fx::FxHandle();
     }
