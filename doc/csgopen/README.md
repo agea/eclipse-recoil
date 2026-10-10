@@ -107,6 +107,47 @@ and automatic climbing does not cause fall damage. The original profile leaves
 it disabled. Rebuild and restart clients and servers together for protocol 285;
 map packages do not need regeneration. See [fall damage](gameplay.md#fall-damage).
 
+### Optional local soldier models
+
+The TDM client supports locally adapted Urban Terror 4.3 Orion and Athena
+models. Alpha wears blue SWAT gear and Omega wears sand gear; each model has
+a helmet, tactical vest, holster and boots. The existing male/female choice
+selects Orion/Athena, and the same models apply to human players and bots.
+
+With Python 3 and Pillow available, import your local installation and rebuild
+the client once:
+
+```sh
+python3 scripts/csgopen/import-soldiers.py /path/to/UrbanTerror43
+scripts/csgopen/dev.sh build
+scripts/csgopen/dev.sh tdm echo
+```
+
+The importer also accepts the installation's `q3ut4` directory. It reads named
+animations and skins as data, builds native MD3 configurations, adapts weapon
+attachments and fits the models to the existing actor size. Walking, running,
+crouching, jumping, swimming, weapon actions and death have mappings. Two
+distance LODs retain the original reduced meshes. Weapon tags retain their
+authored animated orientation: source and native third-person weapons both
+face local +X. Reversed source animation
+frames are explicitly exported with their matching tags.
+
+The generated `data/csgopen/urbanterror-soldiers.zip` is mounted automatically
+through the TDM package root. It is Git-ignored and explicitly excluded from
+the release packager. Its manifest records input archives and SHA-256 hashes.
+The source models and textures belong to FrozenSand and their respective
+authors. The source `q3ut4/readme43.txt` requires permission to reuse its media;
+this importer does not grant reuse or redistribution rights.
+Players on other computers need their own local import to see these models.
+
+Restart the client after importing. `csgopensoldiers 0` switches back to the
+upstream characters for the current session; the next TDM launch enables an
+installed pack again. Without the pack, or with the original gameplay profile,
+the upstream models remain available. First-person arms and weapon assets are
+retained. Incompatible cosmetic attachments are omitted on the soldiers, and
+their authored vertex death animations replace skeletal ragdolls. No server
+rebuild, protocol change or map regeneration is required for these visuals.
+
 ### Quake 3 / Urban Terror map converter
 
 `scripts/csgopen/q3bsp.py` reads compiled Quake 3 `IBSP` version 46 data
@@ -367,8 +408,15 @@ scripts/csgopen/dev.sh original
 scripts/csgopen/dev.sh tdm
 ```
 
-The second command starts TDM on **Echo**, with no automatic bots. To explicitly
-enable filling to two participants, use `/botbalance 2` on an authorized client
+The second command starts TDM on **Echo**, with no automatic bots. To try the
+game against bots, open **Offline Match**, select Deathmatch and a map, choose
+**Number of bots** (0–32) and **Bot skill**, then press **Begin**. The number
+counts computer-controlled players only: choosing 4 adds four bots alongside
+you. Zero disables them, and the menu remembers your selection for next time.
+The count is applied on Begin; startup remains free of automatic bots. Online
+matches use the server's bot settings.
+
+To explicitly enable server filling to two participants, use `/botbalance 2` on an authorized client
 or set `sv_botbalance 2` after loading the server preset. Close
 the client before switching profiles. Choose a player name when prompted,
 then leave spectator mode through the menu or `/spectate 0` in the console.

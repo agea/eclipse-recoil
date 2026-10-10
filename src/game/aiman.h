@@ -329,7 +329,11 @@ namespace aiman
         }
 
         int people = numclients(-1, true, -1), balance = people, numt = numteams(gamemode, mutators);
-        if(m_coop(gamemode, mutators))
+        bool exactbots = G(csgopenweapons) && G(csgopenbotcount) >= 0 && !hasnonlocalclients()
+            && gamemode == G_DEATHMATCH && !m_coop(gamemode, mutators) && !m_duke(gamemode, mutators);
+        if(exactbots)
+            balance = people + min(G(csgopenbotcount), blimit);
+        else if(m_coop(gamemode, mutators))
         {
             numt--; // filter out the human team
             balance += int(ceilf(people *numt * G(coopbalance)));
@@ -376,7 +380,7 @@ namespace aiman
 
         int bots = balance - people;
         if(bots > blimit) balance -= bots - blimit;
-        if(numt > 1 && (balance%numt) != 0) balance -= balance % numt;
+        if(!exactbots && numt > 1 && (balance%numt) != 0) balance -= balance % numt;
 
         if(balance > 0)
         {

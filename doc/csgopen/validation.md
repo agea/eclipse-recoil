@@ -2917,3 +2917,144 @@ packages need no update. The comparison covers the male player and SMG on Echo;
 other models and very dark maps remain manual visual checks. World-surface
 emission and ordinary firing, grenade and smoke effects are retained; disabling
 bloom removes post-processing fringes throughout the scene.
+
+### Optional local Urban Terror soldiers (2026-10-09)
+
+The TDM client can render locally adapted Orion/Athena models for humans and
+bots, with blue SWAT gear for Alpha and sand gear for Omega. The importer reads
+the user's Urban Terror 4.3 PK3s, parses animation/skin data without executing
+source configs, exports native MD3 configs and PNG textures, adapts attachment
+bases, and fits the standing model bounds to 21.4 units before actor scaling.
+It includes two original reduced LOD meshes per body. Reverse walking/crawling
+clips retain synchronized vertex and tag frames. Each engine animation receives
+exactly one definition per moving model part, avoiding random fallback poses.
+
+The local pack is installed as the Git-ignored
+`data/csgopen/urbanterror-soldiers.zip` (approximately 44 MiB). Its manifest
+records input archives and hashes. The release packager explicitly excludes
+this filename, including when packaging a developer checkout. The source
+`q3ut4/readme43.txt` requires permission for media reuse; importing the assets
+does not grant those rights. No upstream asset submodule was edited.
+
+Executed checks, with logs and screenshots in `.csgopen/soldiers-20261009/`:
+
+- Native production client/server build passes (`build.log`); the existing
+  misleading-indentation warning in the spectator switch remains unchanged.
+- Six Python importer tests pass: MD3 header validation, preserved mesh bytes,
+  animated attachment basis, reversed frame synchronization, safe skin parsing,
+  failed-import preservation, and unique movement/weapon animation priorities.
+  Some tests cover multiple related assertions.
+- All eleven release-packager tests pass, including exclusion of the local
+  soldier ZIP while retaining supplied branding assets.
+- Inspection of all twelve generated model configurations verifies skin
+  coverage, unique animation registrations, available source frames and ZIP
+  integrity. The import records scale 0.31018484 for Orion and 0.31527235 for
+  Athena, with feet offsets 23.14505959 and 23.24561882 in source units.
+- The opt-in native `CSGOPEN_SOLDIER_TEST=1` client reports
+  `SOLDIER_DONE FAILURES 0` (`test.log`). It covers both bodies and teams,
+  weapon attachment, omitted incompatible cosmetics, unchanged first-person
+  arms, bot selection, MD3 death without skeletal ragdolls, disabled-pack
+  fallback, non-player actors and original-rule fallback.
+- A separate TDM launch without the optional package root reports
+  `MISSING_SOLDIER_PACK 0` (`missing.log`), confirming missing assets leave
+  the soldier option disabled without requiring the ZIP.
+- The canonical dedicated-loopback smoke, augmented with a local soldier-pack
+  check, reports `SMOKE_DONE FAILURES 0` (`smoke.log`). The setting remains
+  enabled after respawn and map change. The temporary server has no public
+  master registration; the existing LAN server was not restarted.
+- Visual inspection of `preview.png`, `visual-client/soldiers-crouch.png`,
+  `soldier-ingame.0001.png` and `soldier-fallback.0001.png` confirms complete
+  helmets/faces, tactical clothing, weapon orientation, crouched poses and
+  switching back to the original body. The initial preview revealed automatic
+  team tint across all surfaces; exported material/mixer settings now preserve
+  the authored textures. An initial preview-only UI command typo was corrected.
+  The sandbox could not initialize SDL displays; graphical checks ran with
+  desktop access.
+- `git diff --check` passes. Temporary graphical clients and loopback test
+  servers exit after checks. The generated asset ZIP stays excluded from Git.
+
+Restart the TDM client to activate the installed pack. Clients on other
+computers need their own local import; servers and map packages need no update.
+Strafing currently uses the forward walk/run clips. First-person arms remain
+upstream, and authored MD3 deaths replace ragdolls. Reload timing across every
+weapon, live multi-bot movement, distant LOD transitions, and very dark maps
+remain manual visual checks; no claim of full animation parity is made.
+
+### Offline Match bot count (2026-10-09)
+
+Offline Deathmatch settings now expose a persistent Number of bots slider
+from 0 to 32. Begin applies an exact AI count excluding humans. The option
+is hidden for other modes and co-op/duel/survivor mutators. Original balancing
+remains available with `csgopenbotcount -1`; the TDM preset applies that default
+at startup, so merely remembering a menu choice does not spawn bots.
+
+Executed checks:
+
+- Production native client/server build passes; log:
+  `.csgopen/logs/offline-bots-build.log`. The existing spectator-switch
+  indentation warning is unchanged.
+- A native client exercises the actual Offline Match Begin handler and reports
+  `BOT_DONE FAILURES 0` in `.csgopen/offline-bots-20261009/offline.log`:
+  startup has zero bots, selecting 4 creates four bots, joining as a human
+  keeps four, restarting the match with 1/32/0 creates the requested count,
+  32 stays stable through another AI refresh, and `botlimit 2` caps a request
+  for four at two. Switching off CSGOpen rules ignores the override.
+- The saved client config contains the preference 4. A second native launch
+  reloads it while leaving startup bots disabled. It checks Deathmatch
+  availability, hidden Duel controls, and reset of the override for Capture.
+- The second launch connects to a temporary loopback dedicated server with
+  `sv_csgopenbotcount 4`. There are still zero bots with a remote human
+  connected, and calling the menu settings handler online leaves that server
+  value unchanged. These checks report `GUARD_DONE FAILURES 0` in
+  `.csgopen/offline-bots-20261009/guards.log`.
+- The canonical dedicated-loopback smoke reports `SMOKE_DONE FAILURES 0`
+  in `.csgopen/offline-bots-20261009/smoke.log`, including the new default
+  override assertion and zero bots at spawn, respawn and map change.
+- Visual inspection of `guards-client/offline-menu-final.png` confirms the
+  number slider, difficulty controls and Begin button fit the settings area.
+  `client/offline-four-bots.png` records native offline gameplay after the
+  four-bot check. Both images are under the same test directory.
+- `git diff --check` passes. All temporary native clients and loopback servers
+  exit after testing; the existing LAN server was not restarted.
+
+These checks verify counts and launch behavior. Bot tactics and extended
+combat/animation behavior on every map remain manual playtesting work.
+
+### Soldier weapon orientation correction (2026-10-09)
+
+User screenshots exposed sideways third-person weapons in Player setup and
+gameplay. The importer incorrectly rotated `tag_weapon` by 90 degrees on the
+assumption that native weapon meshes faced local +Y. Inspection of the native
+SMG/rifle geometry and muzzle bones confirms they face local +X, like the
+source weapon tags. The adapter now preserves the animated source basis;
+the existing MD3 Y reflection and soldier `mdlyaw 90` supply actor alignment.
+The local soldier ZIP has been regenerated without changing weapon assets,
+first-person arms, gameplay or protocol. Restart the client to reload it.
+
+Executed checks, under `.csgopen/soldier-weapon-20261009/`:
+
+- Seven importer unit tests pass (`unit.log`), including preservation of
+  nontrivial animated axes and vertex/attachment frame synchronization.
+- All 5,874 torso weapon tags across both bodies and three LODs equal the
+  source frame tags. The regenerated ZIP passes its integrity check.
+- The native soldier test now resolves real model attachments and compares
+  the horizontal muzzle heading against actor aim for pistols, SMGs and
+  rifles, both bodies/teams and four yaw directions. Before correction,
+  all 48 cases detected the sideways weapons (`before.log`). After correction,
+  all 48 pass and `final.log` reports `SOLDIER_DONE FAILURES 0`. The muzzle is
+  above the grip, so its vertical offset is excluded from the heading test;
+  each case resets animation interpolation to test the selected idle pose.
+- Production-client previews in `visual-client/weapons-aligned.png` and
+  `player-setup-aligned.png` confirm the weapons point forward instead of
+  across the hands. The first third-person gameplay capture was partly
+  occluded by the nearby wall and does not establish a clear visual check.
+- The canonical dedicated-loopback smoke with the regenerated pack reports
+  `SMOKE_DONE FAILURES 0` (`smoke.log`), including respawn, map change and
+  the optional soldier-pack enable check.
+- `git diff --check` passes. The optional asset ZIP remains ignored and
+  excluded from releases.
+
+The original soldier validation checked the attachment name but did not
+assert its heading; its earlier claim about weapon orientation was incomplete.
+Full grip alignment with every native weapon and every animated firing/reload
+pose remains manual visual work.

@@ -644,6 +644,15 @@ The bot limit and existing bot behavior remain available. Preset initialization
 reapplies the default on restart; persistent bot-enabled deployments should
 place their override after the preset in their server startup configuration.
 
+Offline Match adds a persistent **Number of bots** slider (0–32) to the TDM
+settings. Pressing Begin applies `csgopenbotcount` as an exact AI count,
+excluding the human player and capped by `botlimit`. This bypasses automatic
+participant/team rounding, so four bots plus one human remain five players.
+Teams still use the existing assignment logic. Zero removes bots. The override
+defaults to -1, preserving normal balancing, and is ignored with remote
+clients, original rules, co-op or duel/survivor mutators. Other modes reset it
+to -1 when starting through the menu. Existing Bot skill controls set difficulty.
+
 
 ### Fall damage
 
@@ -727,3 +736,29 @@ They are live projectiles, never collectible equipment.
 Rebuild/update and restart clients and servers to use the rule; no map editing
 or conversion is necessary. The variable uses existing synchronization and does
 not change protocol 285.
+
+### Optional TDM soldier appearance (2026-10-09)
+
+`csgopensoldiers` is a local, non-persistent client setting, defaulting to zero.
+The TDM client enables it when the locally generated Urban Terror soldier ZIP
+is installed. With `csgopenweapons` active, humans and bots use Orion/Athena
+according to their body choice, blue SWAT for Alpha and sand uniforms for
+Omega. Neutral player previews use the Alpha uniform. Other actor types and
+the original gameplay profile retain their upstream models.
+
+The adapter preserves vertex animations, supplies complete helmets and faces,
+and retains the animated weapon attachment basis. Both source and native
+third-person weapons point along local +X; the MD3 loader's Y reflection and
+the body's yaw offset handle the actor orientation without another tag rotation.
+Each body has two reduced distance
+LODs. Authored texture colors are retained without player tint or mixer
+patterns. Cosmetic attachments designed for the upstream skeleton are omitted;
+soldiers use an authored MD3 death animation instead of an IQM ragdoll.
+Strafing reuses the source forward walk/run clips. First-person arms and
+weapon models remain upstream assets.
+
+This is a client presentation option. Actor dimensions, equipment, movement
+rules, damage values, map assets and protocol 285 are unchanged. Missing or
+disabled soldier models fall back to upstream characters. The ZIP is local
+and excluded from releases; see the import and attribution instructions in
+the development README.

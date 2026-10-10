@@ -482,6 +482,12 @@ namespace game
 
     VAR(IDF_PERSIST, nogore, 0, 0, 1); // turns off all gore, 0 = off, 1 = replace
     VAR(IDF_PERSIST, vanitymodels, 0, 1, 1);
+    VAR(0, csgopensoldiers, 0, 0, 1); // optional local Urban Terror soldier pack
+    static const char * const soldiermodels[PLAYERTYPES][2] =
+    {
+        { "actors/soldier/orion/alpha", "actors/soldier/orion/omega" },
+        { "actors/soldier/athena/alpha", "actors/soldier/athena/omega" }
+    };
     FVAR(IDF_PERSIST, vanitymaxdist, FVAR_NONZERO, 1024, FVAR_MAX);
 
     VAR(IDF_PERSIST, mapstartfadein, 0, 3000, VAR_MAX);
@@ -2681,6 +2687,8 @@ namespace game
         weapons::preload();
         projs::preload();
         loopv(mixers) loopj(2) mixers[i].loadtex(j!=0);
+        if(csgopensoldiers && csgopenweapons)
+            loopi(PLAYERTYPES) loopj(2) preloadmodel(soldiermodels[i][j]);
         if(m_edit(gamemode) || m_capture(gamemode)) capture::preload();
         if(m_edit(gamemode) || m_defend(gamemode)) defend::preload();
         if(m_edit(gamemode) || m_bomber(gamemode)) bomber::preload();
@@ -4306,12 +4314,20 @@ namespace game
 
     VAR(IDF_PERSIST, weapswitchanimtime, 1, 300, INT_MAX);
 
+    const char *soldiermodel(gameent *d)
+    {
+        if(!csgopensoldiers || !csgopenweapons || (d->actortype != A_PLAYER && d->actortype != A_BOT)) return NULL;
+        const char *name = soldiermodels[d->model%PLAYERTYPES][d->team == T_OMEGA ? 1 : 0];
+        return loadmodel(name, -1, false) ? name : NULL;
+    }
+
     const char *getplayerstate(gameent *d, modelstate &mdl, int third, float size, int flags, modelattach *mdlattach, bool vanitypoints)
     {
         int atype = clamp(d->actortype, 0, A_MAX - 1);
         if(!actors[atype].isplayer && third != 1) return NULL; // only the player model supports first person views
 
-        const char *mdlname = actors[atype].isplayer ? playertypes[d->model%PLAYERTYPES][third] : actors[atype].mdl;
+        const char *soldier = third == 1 ? soldiermodel(d) : NULL;
+        const char *mdlname = soldier ? soldier : (actors[atype].isplayer ? playertypes[d->model%PLAYERTYPES][third] : actors[atype].mdl);
 
         if(!mdlname || !*mdlname) return NULL; // null model, bail out
 
@@ -4339,6 +4355,8 @@ namespace game
 
         if(d->isnotalive())
         {
+            // Vertex-animated soldiers use their authored death, not an IQM skeleton.
+            if(soldier && d->ragdoll) cleanragdoll(d);
             mdl.anim = ANIM_DYING|ANIM_NOPITCH;
             mdl.basetime = d->lastpain;
             switch(deathanim)
@@ -4359,7 +4377,7 @@ namespace game
                     if(d->ragdoll) cleanragdoll(d);
                     return mdlname;
                 }
-                case 2: mdl.anim |= ANIM_RAGDOLL; break;
+                case 2: if(!soldier) mdl.anim |= ANIM_RAGDOLL; break;
             }
         }
         else if(d->isediting()) mdl.anim = ANIM_EDIT|ANIM_LOOP;
@@ -4474,7 +4492,7 @@ namespace game
                     {
                         mdlattach[ai++] = modelattach("tag_camera", &d->tag[TAG_CAMERA]); // 6
                         mdlattach[ai++] = modelattach("tag_crown", &d->tag[TAG_CROWN]); // 7
-                        mdlattach[ai++] = modelattach("tag_torso", &d->tag[TAG_TORSO]); // 8
+                        mdlattach[ai++] = modelattach(soldier ? "tag_chest" : "tag_torso", &d->tag[TAG_TORSO]); // 8
                         mdlattach[ai++] = modelattach("tag_waist", &d->tag[TAG_WAIST]); // 9
                         mdlattach[ai++] = modelattach("tag_ljet", &d->tag[TAG_JET_LEFT]); // 10
                         mdlattach[ai++] = modelattach("tag_rjet", &d->tag[TAG_JET_RIGHT]); // 11
@@ -4485,7 +4503,7 @@ namespace game
                 }
             }
 
-            if(third)
+            if(third && !soldier)
             {
                 int count = 0, head = vanitybuild(d), found[VANITYMAX] = {0};
                 bool check = vanitycheck(d);

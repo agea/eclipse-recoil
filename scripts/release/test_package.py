@@ -37,6 +37,15 @@ class PackageChecks(unittest.TestCase):
         path.write_bytes(b"fixture")
         return path
 
+    def test_local_urban_terror_assets_are_excluded_from_releases(self):
+        source = self.root / "data"
+        self.file("data/csgopen/urbanterror-soldiers.zip")
+        self.file("data/csgopen/branding/icon.png")
+        destination = self.root / "release-data"
+        pack.copy_tree(source, destination)
+        self.assertFalse((destination / "csgopen/urbanterror-soldiers.zip").exists())
+        self.assertTrue((destination / "csgopen/branding/icon.png").exists())
+
     def test_linux_keeps_audio_closure_but_uses_host_glibc_and_gpu(self):
         binary = self.file("client")
         sdl = self.file("system/libSDL2.so.0")

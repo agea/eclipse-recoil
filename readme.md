@@ -37,6 +37,13 @@ a primary with seven rounds. Choices save immediately and apply at respawn.
 
 ## Development
 
+The local TDM client can use Urban Terror soldiers with helmets, tactical vests
+and boots: blue SWAT uniforms for Alpha and sand uniforms for Omega. Import
+them from your own Urban Terror 4.3 installation using the
+[soldier setup instructions](doc/csgopen/README.md#optional-local-soldier-models).
+Both player body choices and bots are supported. These optional third-party
+assets are excluded from published releases.
+
 Pushes to `master` build and publish client releases for macOS Apple Silicon
 and Intel, Linux x86_64 and ARM64, and Windows x86_64. Packages include assets,
 runtime libraries and the Eclipse Recoil launcher; dedicated-server binaries

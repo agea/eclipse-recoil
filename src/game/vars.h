@@ -487,6 +487,7 @@ GVAR(IDF_GAMEMOD, 0, botskillmax, 1, 90, 101);
 GFVAR(IDF_GAMEMOD, 0, botskillfrags, -100, -0.1f, 100);
 GFVAR(IDF_GAMEMOD, 0, botskilldeaths, -100, 0.1f, 100);
 GVAR(IDF_GAMEMOD, 0, botlimit, 0, 32, MAXAI);
+GVAR(IDF_GAMEMOD, 0, csgopenbotcount, -1, -1, MAXAI); // exact offline TDM bots; -1 keeps normal balancing
 GVAR(IDF_GAMEMOD, 0, botoffset, VAR_MIN, 0, VAR_MAX);
 GSVAR(0, PRIV_MODERATOR, botmalenames, "");
 GSVAR(0, PRIV_MODERATOR, botfemalenames, "");

@@ -11,7 +11,9 @@ CS:GO movement or weapons.
   death loot, or prize drops (`sv_csgopennoloot 1`). Preserve the release and
   remaining fuse of already armed grenades when their holder dies.
 - TDM servers start without bots (`sv_botbalance 0`, `sv_botoffset 0`). Bot
-  filling must be explicitly enabled after loading the preset.
+  filling must be explicitly enabled after loading the preset. Offline Match
+  can opt into an exact bot count when the player presses Begin; keep the
+  local-only override disabled on startup (`sv_csgopenbotcount -1`).
 - Always write and update README files and `AGENTS.md` in English. This includes
   `README.md` and `doc/csgopen/README.md`. Open
   README files with Eclipse Recoil's overall purpose before current milestone details.
@@ -32,6 +34,10 @@ CS:GO movement or weapons.
   XQuartz as default solutions. Preserve Linux and Windows build paths.
 - Do not modify assets or maps in submodules. Use recorded commits:
   `git submodule update --init --recursive`, never `--remote`.
+- Optional Urban Terror soldier assets are imported locally with
+  `scripts/csgopen/import-soldiers.py`. Keep the generated
+  `data/csgopen/urbanterror-soldiers.zip` ignored and excluded from releases;
+  do not commit or redistribute those third-party assets without permission.
 - Keep logs, runtime profiles, and local results in `.csgopen/` (Git-ignored).
 - Bind test servers to loopback, without public master registration or cloud
   deployment.
