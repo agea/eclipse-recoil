@@ -483,6 +483,16 @@ namespace game
     VAR(IDF_PERSIST, nogore, 0, 0, 1); // turns off all gore, 0 = off, 1 = replace
     VAR(IDF_PERSIST, vanitymodels, 0, 1, 1);
     VAR(0, csgopensoldiers, 0, 0, 1); // optional local Urban Terror soldier pack
+    VAR(0, csgopenweaponmodels, 0, 0, 1); // optional local Urban Terror weapon pack
+    static float weaponanimtimes[W_MAX][2] = {{0}};
+    ICOMMAND(0, csgopenweaponanim, "iff", (int *weap, float *fire, float *reload),
+    {
+        if(isweap(*weap))
+        {
+            weaponanimtimes[*weap][0] = max(*fire, 0.f);
+            weaponanimtimes[*weap][1] = max(*reload, 0.f);
+        }
+    });
     static const char * const soldiermodels[PLAYERTYPES][2] =
     {
         { "actors/soldier/orion/alpha", "actors/soldier/orion/omega" },
@@ -790,6 +800,7 @@ namespace game
 
     void setzoomlevel(int level)
     {
+        if(csgopenweapons && inzoom() && W(focus->weapselect, cookzoommin) == W(focus->weapselect, cookzoommax)) return;
         checkzoom();
         zoomlevel += level;
         if(zoomlevel > zoomlevels) zoomlevel = zoomscroll ? 0 : zoomlevels;
@@ -4321,13 +4332,30 @@ namespace game
         return loadmodel(name, -1, false) ? name : NULL;
     }
 
+    const char *csgopenweaponmodel(int weap, int view, int team)
+    {
+        if(!csgopenweaponmodels || !csgopenweapons || !isweap(weap)) return NULL;
+        switch(weap)
+        {
+            case W_PISTOL: case W_SMG: case W_PLASMA: case W_ZAPPER: case W_RIFLE: case W_FLAMER:
+            case W_SHOTGUN: case W_MINIGUN: case W_GRENADE: case W_CORRODER: case W_ROCKET: break;
+            default: return NULL;
+        }
+        if(view == 2 && weap != W_GRENADE && weap != W_CORRODER && weap != W_ROCKET) return NULL;
+        defformatstring(name, "weapons/urbanterror/%s/%s", weaptype[view == 2 && weap == W_ROCKET ? W_GRENADE : weap].name,
+            view == 2 ? "proj" : (view ? "vwep" : (team == T_OMEGA ? "hwep/omega" : "hwep/alpha")));
+        model *m = loadmodel(name, -1, false);
+        return m ? m->name : NULL;
+    }
+
     const char *getplayerstate(gameent *d, modelstate &mdl, int third, float size, int flags, modelattach *mdlattach, bool vanitypoints)
     {
         int atype = clamp(d->actortype, 0, A_MAX - 1);
         if(!actors[atype].isplayer && third != 1) return NULL; // only the player model supports first person views
 
         const char *soldier = third == 1 ? soldiermodel(d) : NULL;
-        const char *mdlname = soldier ? soldier : (actors[atype].isplayer ? playertypes[d->model%PLAYERTYPES][third] : actors[atype].mdl);
+        const char *viewweapon = third == 0 ? csgopenweaponmodel(d->weapselect, 0, d->team) : NULL;
+        const char *mdlname = viewweapon ? viewweapon : (soldier ? soldier : (actors[atype].isplayer ? playertypes[d->model%PLAYERTYPES][third] : actors[atype].mdl));
 
         if(!mdlname || !*mdlname) return NULL; // null model, bail out
 
@@ -4418,7 +4446,7 @@ namespace game
                     }
                     case W_S_PRIMARY: case W_S_SECONDARY:
                     {
-                        if(weaponvisual(weap).thrown)
+                        if(weaponvisual(weap).thrown && !viewweapon)
                         {
                             int millis = lastmillis-d->weaptime[weap], off = d->weapwait[weap] / 2;
                             if(millis <= off || !d->hasweap(weap, m_weapon(d->actortype, gamemode, mutators)))
@@ -4460,10 +4488,33 @@ namespace game
             }
             if(mdlattach && showweap && weapscale > 0.0f)
             {
-                const char *weapmdl = third ? weaponvisual(weap).vwep : weaponvisual(weap).hwep;
-                if(weapmdl && *weapmdl)
-                    mdlattach[ai++] = modelattach("tag_weapon", weapmdl, mdl.anim, mdl.basetime, weapscale); // 0
+                // Imported first-person holds already include animated hands.
+                // Render the complete hold at the camera, rather than attaching
+                // another set of hands to the upstream arm skeleton.
+                viewweapon = third == 0 ? csgopenweaponmodel(weap, 0, d->team) : NULL;
+                if(viewweapon)
+                {
+                    mdlname = viewweapon;
+                    mdl.size *= weapscale;
+                    // Fit the authored action to the actual server timer.
+                    // This changes the visual playback rate, never the rules.
+                    int state = d->weapstate[weap];
+                    if(state == W_S_PRIMARY || state == W_S_SECONDARY || state == W_S_RELOAD)
+                    {
+                        float duration = weaponanimtimes[weap][state == W_S_RELOAD ? 1 : 0];
+                        if(duration > 0 && d->weapwait[weap] > 0) mdl.speed = d->weapwait[weap]/duration;
+                    }
+                }
+                else
+                {
+                    if(third == 0) mdlname = playertypes[d->model%PLAYERTYPES][0];
+                    const char *weapmdl = csgopenweaponmodel(weap, 1, d->team);
+                    if(!third || !weapmdl) weapmdl = third ? weaponvisual(weap).vwep : weaponvisual(weap).hwep;
+                    if(weapmdl && *weapmdl)
+                        mdlattach[ai++] = modelattach("tag_weapon", weapmdl, mdl.anim, mdl.basetime, weapscale); // 0
+                }
             }
+            else if(viewweapon && !showweap) return NULL;
         }
         if(mdlattach)
         {

@@ -144,9 +144,58 @@ Restart the client after importing. `csgopensoldiers 0` switches back to the
 upstream characters for the current session; the next TDM launch enables an
 installed pack again. Without the pack, or with the original gameplay profile,
 the upstream models remain available. First-person arms and weapon assets are
-retained. Incompatible cosmetic attachments are omitted on the soldiers, and
+retained unless the optional weapon pack below is installed. Incompatible
+cosmetic attachments are omitted on the soldiers, and
 their authored vertex death animations replace skeletal ragdolls. No server
 rebuild, protocol change or map regeneration is required for these visuals.
+
+### Optional local weapon models
+
+The TDM client can also use locally imported Urban Terror weapons, in Player
+Setup, on other characters, and in first person. The first-person models use
+the source animated hands and moving weapon parts, with SWAT/desert gloves for
+Alpha/Omega. Weapon names, ammunition, damage, recoil, sounds and server timers
+remain unchanged. The source firing/reload animations are fitted to the actual
+weapon timer; SR8 includes its bolt action and SPAS-12 includes reload start/end.
+
+```sh
+python3 scripts/csgopen/import-weapons.py /path/to/UrbanTerror43
+scripts/csgopen/dev.sh build
+scripts/csgopen/dev.sh tdm echo
+```
+
+| In-game name | Statistics reference | Local appearance |
+| --- | --- | --- |
+| Desert Eagle | Desert Eagle | Desert Eagle |
+| MP5K | PP-Bizon | MP5K |
+| MAC-11 | MP9 | MAC-11 |
+| AK-103 | AK-47 | AK-103 |
+| SR8 | AWP | SR8 |
+| SPAS-12 | XM1014 | SPAS-12 |
+| Negev | M249 | Negev |
+| PSG-1 | SCAR-20 | PSG-1 |
+| HE grenade | Existing HE rules | HE grenade skin |
+| Smoke grenade | Existing smoke rules | Smoke grenade skin |
+| HK69 | Existing HE launcher rules | HK69 |
+
+In-game names follow these models even when the local pack is absent; fallback
+assets retain the same gameplay. Renaming existing weapons does not change
+any of their statistics.
+
+The proximity mine retains its upstream model. HE and smoke also use their
+respective imported models when thrown. The importer reads source skins,
+embedded texture paths and named animation data without executing source
+scripts, resolves case/extension differences, and gives duplicate surface
+names unique IDs. Attachment axes are normalized to match Q3 tag interpolation;
+some source first-person tags contain an already-baked scale that otherwise
+enlarges linked parts again in the native renderer.
+
+`data/csgopen/urbanterror-weapons.zip` is Git-ignored, mounted through the TDM
+package root, and explicitly excluded from releases. Its manifest records the
+source archives and hashes. The same local-only media restrictions as the soldier
+pack apply. Each client needs its own import. Restart after importing;
+`csgopenweaponmodels 0` restores upstream weapon visuals for the current session.
+Missing models and the original gameplay profile fall back to upstream assets.
 
 ### Quake 3 / Urban Terror map converter
 
@@ -435,9 +484,9 @@ The preset sets actual spawn health to 100, disables regeneration, enables
 friendly fire for humans and bots with a team damage multiplier of 1, and
 starts with a three-second respawn delay. Normal jumping and
 crouching remain enabled; parkour capabilities are disabled. A semiautomatic
-pistol and one selected primary are assigned at spawn. Choose an optional SMG or up to four grenades in the equipment menu. The expanded loadout also offers AK-47, AWP, MP9, XM1014 and M249 profiles
+pistol and one selected primary are assigned at spawn. Choose an optional SMG or up to four grenades in the equipment menu. The expanded loadout also offers AK-103, SR8, MAC-11, SPAS-12, Negev and PSG-1 profiles
 on existing Red Eclipse weapon slots. Other weapons remain disabled. Primary
-fire is available; secondary input is reserved for AWP zoom/scoped fire. Upstream respawn requires primary fire or jump input after
+fire is available; secondary input is reserved for SR8/PSG-1 zoom/scoped fire. Upstream respawn requires primary fire or jump input after
 death; the delay does not imply automatic respawn without input.
 
 Pistol and SMG primary fire now have nonzero projectile spread. Relative to
@@ -491,20 +540,23 @@ weapons and models remain; this is not yet a full CS:GO weapon simulation.
 The loadout menu is enabled in the Eclipse Recoil client profile. Equipment
 choices save immediately for the next spawn; the Desert Eagle is always granted
 separately. Choose one primary, then either an SMG or up to four utility slots.
-Selections persist across client restarts. Weapon names identify the reference;
-models, icons and sounds reuse Red Eclipse assets.
+Selections persist across client restarts. Weapon names match the optional
+Urban Terror models; statistics retain the CS:GO reference profiles below.
+Icons, sounds and fallback models reuse Red Eclipse assets.
 
-| Reference | Red Eclipse slot | Torso damage | Interval | Magazine / reserve |
+| In-game name (reference) | Red Eclipse slot | Torso damage | Interval | Magazine / reserve |
 | --- | --- | --- | --- | --- |
-| AK-47 | Zapper | 36 | 100 ms | 30 / 90 |
-| AWP | Rifle | 115 | 1455 ms | 5 / 10 |
-| MP9 | Plasma | 26 | 70 ms | 30 / 60 |
-| XM1014 | Shotgun | 20 per pellet, 6 pellets | 350 ms | 7 / 32 |
-| M249 | Minigun | 32 | 80 ms | 100 / 200 |
-| PP-Bizon | SMG | 27 | 80 ms | 64 / 128 |
+| AK-103 (AK-47) | Zapper | 36 | 100 ms | 30 / 90 |
+| SR8 (AWP) | Rifle | 115 | 1455 ms | 5 / 10 |
+| MAC-11 (MP9) | Plasma | 26 | 70 ms | 30 / 60 |
+| SPAS-12 (XM1014) | Shotgun | 20 per pellet, 6 pellets | 350 ms | 7 / 32 |
+| Negev (M249) | Minigun | 32 | 80 ms | 100 / 200 |
+| MP5K (PP-Bizon) | SMG | 27 | 80 ms | 64 / 128 |
+| PSG-1 (SCAR-20) | Flamer | 80 | 250 ms | 20 / 40 |
 
 Each new profile uses a 4x headshot multiplier. AK-47, MP9, XM1014 and M249
-are automatic; AWP is semiautomatic. Secondary input operates the AWP scope
+are automatic; SR8 is semiautomatic. PSG-1 follows the source SCAR-20
+hold-to-fire setting at 240 RPM. Secondary input operates the SR8/PSG-1 scopes
 without the original charging attack; scoped and unscoped shots share damage,
 ammunition and cadence. Other alternate attacks remain blocked on client and
 server. Eclipse Recoil allows Minigun in the loadout, whereas the original profile
@@ -666,8 +718,12 @@ A direct player hit deals 25 damage (25% of the preset's 100 HP), once per
 target per grenade, before its later explosion. Recoil is gentle (0.1–0.2
 vertical, no horizontal recoil, kick push reduced from 300 to 5). There is no guided flight. Press **R** to reload one round (1.8 seconds); the usual
 client automatic reload preference can also reload it when empty. Ammunition
-is independent of the hand-thrown HE. It uses the existing Rocket weapon model
-and Grenade projectile model. Range and feel need manual tuning.
+is independent of the hand-thrown HE. With the optional local Urban Terror
+pack it uses the HK69 and the HE grenade projectile; otherwise it falls back
+to the existing Rocket and Grenade models. Imported flying grenades use a
+larger, solid silhouette than the hand-held mesh. HE, smoke and launcher
+grenades have no countdown flare/light (or its attached warning beep) in TDM;
+bounce and explosion effects remain. Range and feel need manual tuning.
 
 ## Dedicated server on loopback
 
@@ -912,3 +968,58 @@ loadouts and normal reloads remain available. Armed grenades are active
 projectiles, not pickups: they still fall on death and keep their remaining fuse.
 The original profile defaults the rule off. Rebuild/update clients and servers
 and restart the match; map packages need no regeneration. Protocol remains 285.
+
+### PSG-1 / SCAR-20 reference
+
+The additional PSG-1 primary reuses the previously disabled Flamer slot only
+in TDM. The supplied sheet's SCAR-20 and scoped rows are saved in
+`config/csgopen/weapon-reference.json`, retrieved on 2026-10-11. Converted
+values are 80 torso damage, 4x headshots, 240 RPM (250 ms), one bullet per shot,
+20 loaded rounds and 40 reserves. Hold-to-fire follows the source's Yes value.
+Scoped shots share the magazine, damage and cadence; secondary input operates
+the scope rather than the original air blast. The new weapon uses conventional
+bullet muzzle/trail/impact effects and sounds, without splash, fire residuals
+or fragments. It is available in the primary equipment picker for the next spawn.
+
+Spread (2.6 unscoped / 0.23 scoped), posture multipliers and 2-second reload are
+prototype tuning values; the sheet does not supply a reload duration. Its
+armor penetration, distance falloff, Source inaccuracy/recoil and per-weapon
+mobility are not implemented, matching the limitations of the existing arsenal.
+The original profile keeps its Flamer and original secondary-attack behavior.
+
+### Weapon zoom controls
+
+In TDM, PSG-1 has one fixed zoom (20-degree FOV) and AK-103 has one mild
+fixed zoom (60-degree FOV), activated with secondary input. The wheel does
+not change those zoom levels or the shared zoom preference. SR8 retains
+its adjustable zoom. AK scoped fire shares its primary damage, cadence,
+magazine, posture accuracy, recoil and burst spread buildup/recovery; zoom
+only magnifies the view and provides no accuracy bonus. Crouching and movement
+continue to affect AK accuracy identically in both views. PSG-1 keeps its
+existing scoped accuracy. Original-profile zoom behavior is unchanged.
+
+TDM spawn protection lasts four seconds (`sv_spawnprotect 4000`). The original
+shoot/cook/objective interruption rules remain enabled; human and bot respawn
+delays remain three seconds.
+
+Moving weapon pieces prefer their named attachment tag. This keeps the SPAS-12
+ejector on its animated `tag_ejector`, even though its source mesh also exposes
+`tag_main`.
+
+TDM PSG-1 and SR8 hide the unscoped crosshair, including the central ammunition
+ring, with either HUD pointer renderer. Their scope reticle and weapon statistics
+remain unchanged; other weapons and the original profile retain their crosshair.
+
+The optional local weapon pack includes Urban Terror's monochrome weapon icons
+for the 11 imported appearances. Transparent square padding preserves their
+proportions in equipment menus, the HUD and the weapon wheel. A shared native
+`weaponicon` lookup selects them only for TDM with icon-ready pack data; the
+mine, missing pack and original gameplay use the existing icons. Re-run the
+weapon importer to update an older local pack. No third-party icon is bundled
+with releases.
+
+TDM Player Setup shows name, character and loadout together, with the existing
+Save/Reset controls. Colour, mixer and vanity controls are hidden in this
+preset. Primary and utility choices keep their existing selection overlays
+and immediate loadout persistence, taking effect at the next respawn. The original profile keeps
+its separate appearance and loadout pages.

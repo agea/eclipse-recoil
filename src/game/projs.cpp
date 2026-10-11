@@ -128,8 +128,17 @@ namespace projs
                 projfx[PROJFXINDEX(fxtype, subtype)] : fx::FxHandle();
     }
 
+    static bool csgopengrenade(const projent &proj)
+    {
+        return csgopenweapons && proj.projtype == PROJ_SHOT &&
+            (proj.weap == W_GRENADE || proj.weap == W_CORRODER || proj.weap == W_ROCKET);
+    }
+
     static void doprojfx(projent &proj, int subtype)
     {
+        // The original grenade LIFE effect is a pulsing warning flare/light.
+        // Keep bounce and explosion effects, but no countdown effect in TDM.
+        if(subtype == PROJ_FX_LIFE && csgopengrenade(proj)) return;
         fx::FxHandle fxhandle = getprojfx(proj.fxtype, subtype);
 
         // Update the hook
@@ -820,6 +829,8 @@ namespace projs
 
     float fadeweap(projent &proj)
     {
+        // Ballistic grenades remain solid, including shots near their owner.
+        if(csgopengrenade(proj)) return 1.0f;
         float trans = WF(WK(proj.flags), proj.weap, blend, WS(proj.flags));
         if(WF(WK(proj.flags), proj.weap, fadein, WS(proj.flags)) != 0)
         {
@@ -1055,6 +1066,7 @@ namespace projs
                 proj.interacts = WF(WK(proj.flags), proj.weap, interacts, WS(proj.flags));
                 proj.mdlname = weaponvisual(proj.weap).proj[WS(proj.flags) ? 1 : 0].count ? weaponvisual(proj.weap).proj[WS(proj.flags) ? 1 : 0].name[rnd(weaponvisual(proj.weap).proj[WS(proj.flags) ? 1 : 0].count)] : "";
                 if(csgopenweapons && proj.weap == W_ROCKET) proj.mdlname = weaptype[W_GRENADE].proj[0].name[0];
+                if(const char *name = game::csgopenweaponmodel(proj.weap, 2)) proj.mdlname = name;
                 proj.fxtype = WF(WK(proj.flags), proj.weap, fxtypeproj, WS(proj.flags));
                 proj.escaped = !proj.owner || proj.child || WK(proj.flags) || WF(WK(proj.flags), proj.weap, collide, WS(proj.flags))&COLLIDE_LENGTH || proj.weap == W_MELEE;
                 updatetargets(proj, waited);
@@ -1509,7 +1521,7 @@ namespace projs
         }
 
         // CSGOpen reuses energy weapon models, but their firing sounds are bullets.
-        int soundweap = csgopenweapons && weap == W_CORRODER ? W_GRENADE : (csgopenweapons && (weap == W_PLASMA || weap == W_ZAPPER || weap == W_RIFLE) ? W_SMG : weap);
+        int soundweap = csgopenweapons && weap == W_CORRODER ? W_GRENADE : (csgopenweapons && (weap == W_PLASMA || weap == W_ZAPPER || weap == W_RIFLE || weap == W_FLAMER) ? W_SMG : weap);
         if(weaptype[soundweap].sound >= 0 && (weap != W_MELEE || !(WS(flags))))
         {
             int slot = WSNDF(soundweap, soundweap == weap && WS(flags));
@@ -1521,7 +1533,7 @@ namespace projs
                 if(!csgopenweapons && weap == W_ZAPPER && !(WS(flags)))
                     emitsound(WSND2(weap, WS(flags), S_W_TRANSIT), sndpos, d, &d->wschan[WS_OTHER_CHAN], 0, skew);
 
-                if((weap == W_FLAMER || (!csgopenweapons && (weap == W_ZAPPER || weap == W_CORRODER))) && !(WS(flags)))
+                if(!csgopenweapons && (weap == W_FLAMER || weap == W_ZAPPER || weap == W_CORRODER) && !(WS(flags)))
                 {
                     int ends = lastmillis + delayattack + PHYSMILLIS;
                     if(issound(d->wschan[WS_MAIN_CHAN]) && soundsources[d->wschan[WS_MAIN_CHAN]].slotnum == getsoundslot(slot))
@@ -1602,12 +1614,12 @@ namespace projs
         d->lastshoot = lastmillis;
         if(A(d->actortype, abilities)&(1<<A_A_PUSHABLE))
         {
-            vec kick = vec(d->yaw*RAD, d->pitch*RAD).mul(-W2(weap, kickpush, WS(flags))*skew);
+            vec kick = vec(d->yaw*RAD, d->pitch*RAD).mul(-W2(weap, kickpush, WS(flags) && !(csgopenweapons && weap == W_ZAPPER))*skew);
             if(!kick.iszero())
             {
                 if(d == game::focus) game::swaypush.add(vec(kick).mul(kickpushsway));
                 float kickmod = kickpushscale;
-                if(W2(weap, cooked, WS(flags))&W_C_ZOOM && WS(flags)) kickmod *= kickpushzoom;
+                if(!(csgopenweapons && weap == W_ZAPPER) && W2(weap, cooked, WS(flags))&W_C_ZOOM && WS(flags)) kickmod *= kickpushzoom;
                 if(d->crouching() && !d->hasslide()) kickmod *= kickpushcrouch;
                 d->vel.add(vec(kick).mul(kickmod));
             }
@@ -2764,7 +2776,7 @@ namespace projs
                         mdl.material[0] = mdl.material[1] = bvec::fromcolor(proj.weap == W_CORRODER ? 0xA0A0A0 : 0xE88C28);
                     mdl.material[2] = proj.owner ? bvec::fromcolor(game::getcolour(proj.owner, game::playertoneteam, game::playertoneteamlevel, game::playertoneteammix)) : bvec(128, 128, 128);
 
-                    if(!isweap(proj.weap) || (WF(WK(proj.flags), proj.weap, proxtype, WS(proj.flags)) && (!proj.stuck || proj.lifetime%500 >= 300))) mdl.material[3] = bvec(0, 0, 0);
+                    if(csgopengrenade(proj) || !isweap(proj.weap) || (WF(WK(proj.flags), proj.weap, proxtype, WS(proj.flags)) && (!proj.stuck || proj.lifetime%500 >= 300))) mdl.material[3] = bvec(0, 0, 0);
                     else if(W2(proj.weap, colourproj, WS(proj.flags)) != 0)
                     {
                         float amt = clamp(proj.lifespan, 0.f, 1.f);

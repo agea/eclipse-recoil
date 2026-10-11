@@ -1021,7 +1021,7 @@ struct clientstate
     bool canshoot(int weap, int flags, int sweap, int millis, int skip = 0)
     {
         if(climbweaponblocked(weap, millis)) return false;
-        if(G(csgopenweapons) && WS(flags) && weap != W_RIFLE) return false;
+        if(G(csgopenweapons) && WS(flags) && weap != W_RIFLE && weap != W_FLAMER && weap != W_ZAPPER) return false;
         if(!(A(actortype, abilities)&(WS(flags) ? (1<<A_A_SECONDARY) : (1<<A_A_PRIMARY)))) return false;
 
         if(weap == weapselect || weap == W_MELEE)
@@ -1196,7 +1196,7 @@ struct clientstate
 
     static bool csgopenprimary(int weap)
     {
-        return weap == W_SHOTGUN || weap == W_SMG || weap == W_PLASMA || weap == W_ZAPPER || weap == W_RIFLE || weap == W_MINIGUN || weap == W_ROCKET;
+        return weap == W_SHOTGUN || weap == W_SMG || weap == W_PLASMA || weap == W_ZAPPER || weap == W_RIFLE || weap == W_FLAMER || weap == W_MINIGUN || weap == W_ROCKET;
     }
 
     static bool csgopenutility(int weap)
@@ -3090,6 +3090,7 @@ namespace game
     extern void footstep(gameent *d, int curfoot = -1);
     extern void getplayermixer(gameent *d, modelstate &mdl, int third = 0);
     extern void getplayermaterials(gameent *d, modelstate &mdl);
+    extern const char *csgopenweaponmodel(int weap, int view = 1, int team = T_ALPHA);
     extern const char *getplayerstate(gameent *d, modelstate &mdl, int third = 1, float size = 1, int flags = 0, modelattach *mdlattach = NULL, bool vanitypoints = false);
     extern void haloadjust(const vec &o, modelstate &mdl);
     extern bool haloallow(const vec &o, gameent *d, bool justtest = false);

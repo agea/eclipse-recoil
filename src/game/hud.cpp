@@ -549,7 +549,10 @@ namespace hud
 
     void checkui()
     {
-        hidecrosshair = 0;
+        // Both pointer renderers share this flag; retain the scope reticle.
+        hidecrosshair = csgopenweapons && game::focus->state == CS_ALIVE
+            && (game::focus->weapselect == W_RIFLE || game::focus->weapselect == W_FLAMER)
+            && !game::inzoom();
 
         if(newpointers) UI::pokeui("pointer", SURFACE_FOREGROUND);
         loopi(SURFACE_LOOP) UI::pokeui("hud", i);
@@ -872,7 +875,7 @@ namespace hud
         float radius = s*clipoffset;
         if(clipspread && !preview)
         {
-            bool scoped = csgopenweapons && weap == W_RIFLE && (game::focus->weapstate[weap] == W_S_ZOOM || game::focus->prevstate[weap] == W_S_ZOOM);
+            bool scoped = csgopenweapons && (weap == W_RIFLE || weap == W_FLAMER || weap == W_ZAPPER) && (game::focus->weapstate[weap] == W_S_ZOOM || game::focus->prevstate[weap] == W_S_ZOOM);
             float modifier = weapons::accmodspread(game::focus, weap, scoped, scoped);
             float spread = WSP(weap, scoped, game::gamemode, game::mutators, modifier);
             radius *= clamp(sqrtf(max(spread, 0.f)/2.f), 0.65f, 2.5f);
@@ -1155,6 +1158,8 @@ namespace hud
         return privtexs[priv&PRIV_LOCAL ? 1 : 0][clamp(priv&PRIV_TYPE, 0, priv&PRIV_LOCAL ? int(PRIV_ADMINISTRATOR) : int(PRIV_LAST))];
     }
 
+    VAR(0, csgopenweaponicons, 0, 0, 1); // supplied by the optional local pack
+
     const char *itemtex(int type, int stype)
     {
         switch(type)
@@ -1163,6 +1168,14 @@ namespace hud
             case AFFINITY: return flagtex; break;
             case WEAPON:
             {
+                if(csgopenweapons && csgopenweaponicons && isweap(stype)
+                    && stype != W_MINE && stype != W_CLAW && stype != W_SWORD
+                    && stype != W_JETSAW && stype != W_ECLIPSE && stype != W_MELEE)
+                {
+                    static string icon;
+                    formatstring(icon, "weapons/urbanterror/icons/%s.png", weaptype[stype].name);
+                    return icon;
+                }
                 if(csgopenweapons && stype == W_CORRODER) return grenadetex;
                 const char *weaptexs[W_MAX] = {
                     clawtex, pistoltex, swordtex, shotguntex, smgtex, flamertex, plasmatex, zappertex, rifletex, corrodertex, grenadetex, minetex, rockettex, miniguntex, jetsawtex, eclipsetex, meleetex
@@ -1174,6 +1187,7 @@ namespace hud
         }
         return "";
     }
+    ICOMMAND(0, weaponicon, "i", (int *weap), result(itemtex(WEAPON, *weap)));
 
     void drawzoom(int w, int h)
     {

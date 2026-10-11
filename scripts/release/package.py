@@ -24,7 +24,7 @@ def run(*args, env=None):
 def copy_tree(source, destination):
     # Asset submodules contain .git files pointing outside the archive.
     shutil.copytree(source, destination, ignore=shutil.ignore_patterns(
-        ".git", ".github", ".DS_Store", "__pycache__", "urbanterror-soldiers.zip"))
+        ".git", ".github", ".DS_Store", "__pycache__", "urbanterror-soldiers.zip", "urbanterror-weapons.zip"))
 
 
 def copy_library(source, destination, origins):

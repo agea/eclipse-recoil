@@ -82,8 +82,10 @@ di friendly fire disattivato; non richiede modifiche C++.
 `m_delay` seleziona spawndelay normale per DM senza mutatori; server e client
 usano lo stesso valore. Dopo morte, click primario/salto richiede il respawn;
 il server lo concede al termine dei 3 secondi. Non è un respawn automatico
-senza input. La protezione originale di spawn (3000 ms, interrotta sparando)
-resta presente e deve essere considerata nei test di danno.
+senza input. La protezione di spawn dura 4000 ms. Le condizioni originali di interruzione
+restano invariate: sparare, preparare un lancio/attivare lo zoom o prendere
+un obiettivo la interrompono; muoversi non la interrompe. Il ritardo del
+respawn resta 3000 ms per umani e bot.
 
 L'HUD upstream mostra la salute come percentuale del valore di spawn, quindi
 100 iniziali; `damagedivisor` client passa da 10 a 1 per le cifre dell'obituary.
@@ -762,3 +764,44 @@ rules, damage values, map assets and protocol 285 are unchanged. Missing or
 disabled soldier models fall back to upstream characters. The ZIP is local
 and excluded from releases; see the import and attribution instructions in
 the development README.
+
+## Nomi Urban Terror e PSG-1 — 11 ottobre 2026
+
+I nomi visibili sono MP5K (statistiche PP-Bizon), MAC-11 (MP9), AK-103
+(AK-47), SR8 (AWP), SPAS-12 (XM1014), Negev (M249) e HK69 (lanciagranate HE).
+La Desert Eagle e le utility conservano il nome. I valori delle armi esistenti
+non cambiano. I nomi valgono anche con i modelli di fallback.
+
+Il PSG-1 è una primaria aggiuntiva sullo slot Flamer, disponibile nel loadout.
+La riga SCAR-20 del foglio fornito dall'utente assegna 80 HP torso, 4x testa,
+240 RPM (250 ms), 20 colpi nel caricatore e 40 di riserva, un proiettile per
+colpo e fuoco mantenendo premuto (Hold to Shoot = Yes). Danno motore 800 con
+damagescale 0.1. Il mirino usa il secondario, con danno/cadenza/munizioni
+condivisi; niente air blast, carica, bruciatura, splash o frammenti. Dispersione
+2.6/0.23 senza/con mirino e ricarica 2000 ms sono tarature provvisorie, non
+conversioni complete delle unità Source. Nessuna nuova simulazione di armatura,
+falloff o mobilità. Il profilo originale conserva il Flamer upstream.
+
+## Zoom fisso PSG-1 e AK-103
+
+PSG-1: un solo ingrandimento, FOV 20. AK-103: un solo ingrandimento lieve,
+FOV 60. Il tasto secondario attiva entrambi; la rotellina non cambia il
+livello e non modifica il livello condiviso usato da SR8, che resta regolabile.
+AK conserva la precisione primaria anche col mirino: medesima dispersione,
+moltiplicatori postura/movimento e accumulo/recupero della raffica. Anche
+rinculo, danno, cadenza e munizioni restano quelli del tiro senza zoom.
+La precisione con mirino di PSG-1 resta 0.23. Profilo originale invariato.
+
+PSG-1 e SR8 non mostrano il mirino centrale né il relativo anello munizioni
+senza zoom. Il reticolo nello scope resta visibile; precisione e statistiche
+restano invariate. La regola vale solo per il preset TDM.
+
+Le icone di scelta equipaggiamento, HUD e selezione rapida usano le sagome
+monocromatiche di Urban Terror corrispondenti ai modelli importati. Restano
+colorate secondo lo slot arma e mantengono le proporzioni. La mina conserva
+la propria icona; senza il pacchetto locale si usano le icone originali.
+
+Nel preset TDM, Player Setup contiene direttamente nome, personaggio e loadout.
+Colori, mixer e vanities non vengono più mostrati. Le scelte di equipaggiamento
+restano registrate subito e valgono dal prossimo respawn, come prima.
+Save e Reset mantengono il comportamento esistente per le impostazioni. Il profilo originale conserva la propria interfaccia.

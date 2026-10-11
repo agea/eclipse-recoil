@@ -10,6 +10,20 @@ CS:GO movement or weapons.
 - The TDM preset has no map pickups, ammunition loot, manual equipment drops,
   death loot, or prize drops (`sv_csgopennoloot 1`). Preserve the release and
   remaining fuse of already armed grenades when their holder dies.
+- TDM weapon names follow the optional Urban Terror models. Existing weapon
+  statistics remain their CS:GO references; the shotgun uses the SPAS-12 model/name
+  with unchanged XM1014 statistics; PSG-1 uses the SCAR-20 row on the
+  Flamer slot. Keep SR8, PSG-1 and AK-103 zoom input allowed in TDM. PSG-1 and AK-103
+  use fixed zoom; AK zoom must preserve primary accuracy and burst buildup.
+  PSG-1 and SR8 hide the unscoped crosshair while retaining the scope reticle.
+  Imported weapon icons follow those models in equipment menus and HUD, with
+  native fallback for the mine, absent pack and original gameplay.
+- TDM Player Setup combines identity and loadout in one page. Hide colour,
+  mixer and vanity controls there while preserving the original-profile UI.
+- TDM HE, smoke and launcher projectiles stay opaque and have no countdown
+  flare/light. Keep bounce/explosion effects and grenade physics unchanged.
+- TDM spawn protection lasts 4000 ms; preserve the original shoot/cook/objective
+  interruption rules and 3000 ms human/bot respawn delays.
 - TDM servers start without bots (`sv_botbalance 0`, `sv_botoffset 0`). Bot
   filling must be explicitly enabled after loading the preset. Offline Match
   can opt into an exact bot count when the player presses Begin; keep the
@@ -35,8 +49,10 @@ CS:GO movement or weapons.
 - Do not modify assets or maps in submodules. Use recorded commits:
   `git submodule update --init --recursive`, never `--remote`.
 - Optional Urban Terror soldier assets are imported locally with
-  `scripts/csgopen/import-soldiers.py`. Keep the generated
-  `data/csgopen/urbanterror-soldiers.zip` ignored and excluded from releases;
+  `scripts/csgopen/import-soldiers.py`, and weapon assets with
+  `scripts/csgopen/import-weapons.py`. Keep the generated
+  `data/csgopen/urbanterror-soldiers.zip` and `urbanterror-weapons.zip`
+  ignored and excluded from releases;
   do not commit or redistribute those third-party assets without permission.
 - Keep logs, runtime profiles, and local results in `.csgopen/` (Git-ignored).
 - Bind test servers to loopback, without public master registration or cloud

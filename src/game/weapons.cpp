@@ -260,6 +260,8 @@ namespace weapons
 
     float accmodspread(gameent *d, int weap, bool secondary, bool zooming)
     {
+        // AK magnification changes only the view: retain posture and burst spread.
+        if(csgopenweapons && weap == W_ZAPPER) secondary = zooming = false;
         float r = 0;
         if((d->move || d->strafe) && d->running()) r += d->sprinting(false) ? W2(weap, spreadsprinting, secondary) : W2(weap, spreadrunning, secondary);
         else if(d->move || d->strafe) r += W2(weap, spreadmoving, secondary) * (d->crouching() ? W2(weap, spreadcrouch, secondary) : 1.0f);
@@ -373,6 +375,7 @@ namespace weapons
 
         d->getseqid(SEQ_SHOT); // increments seqid for the shot
 
+        bool aimsecondary = secondary && !(csgopenweapons && weap == W_ZAPPER);
         int rays = W2(weap, rays, secondary);
         if(rays > 1 && W2(weap, cooked, secondary)&W_C_RAYS && W2(weap, cooktime, secondary) && scale < 1)
             rays = max(1, int(ceilf(rays*scale)));
@@ -398,33 +401,33 @@ namespace weapons
             dest = targ;
 
             float m = accmodspread(d, weap, secondary, W2(weap, cooked, true)&W_C_ZOOM && secondary && scale >= 0.9f);
-            float spread = WSP(weap, secondary, game::gamemode, game::mutators, m);
+            float spread = WSP(weap, aimsecondary, game::gamemode, game::mutators, m);
             loopi(rays)
             {
                 vec r;
-                if(spread > 0) offsetray(from, dest, spread, W2(weap, spreadz, secondary), r);
+                if(spread > 0) offsetray(from, dest, spread, W2(weap, spreadz, aimsecondary), r);
                 else r = dest;
-                if(W2(weap, znudge, secondary) != 0) r.z += from.dist(r)*W2(weap, znudge, secondary);
+                if(W2(weap, znudge, aimsecondary) != 0) r.z += from.dist(r)*W2(weap, znudge, aimsecondary);
                 addshot(r);
             }
         }
-        if(W2(weap, recoiltime, secondary))
+        if(W2(weap, recoiltime, aimsecondary))
         {
-            int recoiltime = W2(weap, recoiltime, secondary);
+            int recoiltime = W2(weap, recoiltime, aimsecondary);
             if(recoiltime < 0)
             {
                 int value = 0 - recoiltime;
                 recoiltime = int(ceilf(W2(weap, delayattack, secondary) / float(value)));
             }
 
-            float recoilyawmin = W2(weap, recoilyawmin, secondary), recoilyawmax = W2(weap, recoilyawmax, secondary),
-                  recoilpitchmin = W2(weap, recoilpitchmin, secondary), recoilpitchmax = W2(weap, recoilpitchmax, secondary);
-            accmodrecoil(d, weap, secondary, W2(weap, cooked, true)&W_C_ZOOM && secondary && scale >= 0.9f, recoiltime, recoilyawmin, recoilyawmax, recoilpitchmin, recoilpitchmax);
-            d->addrecoil(weap, lastmillis, int(ceilf(recoiltime*scale)), recoilyawmin*scale, recoilyawmax*scale, recoilpitchmin*scale, recoilpitchmax*scale, W2(weap, recoilpitchdir, secondary));
+            float recoilyawmin = W2(weap, recoilyawmin, aimsecondary), recoilyawmax = W2(weap, recoilyawmax, aimsecondary),
+                  recoilpitchmin = W2(weap, recoilpitchmin, aimsecondary), recoilpitchmax = W2(weap, recoilpitchmax, aimsecondary);
+            accmodrecoil(d, weap, aimsecondary, W2(weap, cooked, true)&W_C_ZOOM && aimsecondary && scale >= 0.9f, recoiltime, recoilyawmin, recoilyawmax, recoilpitchmin, recoilpitchmax);
+            d->addrecoil(weap, lastmillis, int(ceilf(recoiltime*scale)), recoilyawmin*scale, recoilyawmax*scale, recoilpitchmin*scale, recoilpitchmax*scale, W2(weap, recoilpitchdir, aimsecondary));
         }
 
         // Apply buildup after computing this shot, so the first shot stays accurate.
-        if(!secondary && spreadburstadd > 0 && W2(weap, spread, false) > 0)
+        if(!aimsecondary && spreadburstadd > 0 && W2(weap, spread, false) > 0)
             d->addweapbloom(weap, lastmillis, spreadburstadd * (weap == W_PISTOL ? pistolspreadburstscale : 1.0f), spreadburstmax, spreadburstrecovery);
         projs::shootv(weap, secondary ? HIT_ALT : 0, sub, offset, scale, from, dest, shots, d, true, v);
         client::addmsg(N_SHOOT, "ri9i4v", d->clientnum, lastmillis-game::maptime, weap, secondary ? HIT_ALT : 0, cooked, v ? v->clientnum : -1, int(from.x*DMF), int(from.y*DMF), int(from.z*DMF), int(dest.x*DMF), int(dest.y*DMF), int(dest.z*DMF), shots.length(), shots.length()*sizeof(shotmsg)/sizeof(int), shots.getbuf());
@@ -445,6 +448,8 @@ namespace weapons
     {
         loopi(W_ALL)
         {
+            loopj(3) loopk(j ? 1 : 2)
+                if(const char *name = game::csgopenweaponmodel(i, j, k ? T_OMEGA : T_ALPHA)) preloadmodel(name);
             if(*weaptype[i].item) preloadmodel(weaptype[i].item);
             if(*weaptype[i].ammo) preloadmodel(weaptype[i].ammo);
             if(*weaptype[i].vwep) preloadmodel(weaptype[i].vwep);

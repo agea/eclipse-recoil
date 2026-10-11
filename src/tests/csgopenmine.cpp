@@ -3,6 +3,41 @@
 
 namespace minetest
 {
+    void checkgrenadevisuals()
+    {
+        int failed = 0;
+        const int weapons[] = { W_GRENADE, W_CORRODER, W_ROCKET };
+        loopi(3)
+        {
+            projent p;
+            p.projtype = PROJ_SHOT;
+            p.weap = weapons[i];
+            p.owner = game::player1;
+            p.o = game::player1->o;
+            p.flags = 0;
+            p.fxtype = FX_P_GRENADE;
+            p.lifemillis = 3000;
+            const char *name = game::csgopenweaponmodel(p.weap, 2);
+            model *m = name ? loadmodel(name) : NULL;
+            vec center, radius;
+            if(m) m->boundbox(center, radius);
+            bool ok = m && radius.z >= 2 && radius.x > 0.5f;
+            const int lifetimes[] = { 3000, 2500, 100, 1 };
+            loopj(4)
+            {
+                p.lifetime = lifetimes[j];
+                ok = ok && projs::fadeweap(p) == 1.0f;
+                projs::doprojfx(p, projs::PROJ_FX_LIFE);
+                ok = ok && !p.effect;
+            }
+            ok = ok && projs::getprojfx(p.fxtype, projs::PROJ_FX_DESTROY).isvalid();
+            if(!ok) failed++;
+            conoutf(colourwhite, "GRENADE_VISUAL_%s WEAPON %d MODEL %s HEIGHT %.3f", ok ? "PASS" : "FAIL", p.weap, name ? name : "missing", m ? radius.z*2 : 0);
+        }
+        conoutf(colourwhite, "GRENADE_VISUAL_DONE FAILURES %d", failed);
+    }
+    ICOMMAND(0, grenadevisualtest, "", (), minetest::checkgrenadevisuals());
+
     void bulletfxcheck()
     {
         const char *names[] = { "FX_P_BULLET_LIFE", "FX_P_BULLET_DESTROY", "FX_P_PELLET_LIFE", "FX_P_PELLET_DESTROY" };

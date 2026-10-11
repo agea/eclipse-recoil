@@ -360,6 +360,13 @@ CLIENT_OBJS = \
     game/weapons.o
 
 # Build tests
+ifeq (1,$(CSGOPEN_WEAPON_TEST))
+    ifeq ($(APPCLIENT),$(APPNAME))
+        $(error CSGOPEN_WEAPON_TEST requires a separate APPCLIENT path)
+    endif
+    CLIENT_OBJS := $(filter-out game/game.o,$(CLIENT_OBJS)) tests/csgopenweapons.o
+    tests/csgopenweapons.o: game/game.cpp game/game.h game/vars.h
+endif
 ifeq (1,$(CSGOPEN_SOLDIER_TEST))
     ifeq ($(APPCLIENT),$(APPNAME))
         $(error CSGOPEN_SOLDIER_TEST requires a separate APPCLIENT path)

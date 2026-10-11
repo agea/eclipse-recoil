@@ -3058,3 +3058,246 @@ The original soldier validation checked the attachment name but did not
 assert its heading; its earlier claim about weapon orientation was incomplete.
 Full grip alignment with every native weapon and every animated firing/reload
 pose remains manual visual work.
+
+### Optional local weapon models (2026-10-10)
+
+Imported ten weapon appearances from the local Urban Terror installation,
+including first-person animated hands/parts, third-person held weapons and
+distinct HE/smoke projectile skins. The user selected MP5K for both PP-Bizon
+and MP9, and SR8 for AWP. The remaining direct mappings are documented in the
+README. The mine retains its native model. Server rules and weapon names stay
+unchanged. The generated local ZIP is ignored and excluded from releases.
+
+Executed checks, under `.csgopen/weapons-20261010/`:
+
+- Client and dedicated-server production build pass (`build.log`).
+- Thirteen soldier/weapon importer unit checks pass (`import-tests.log`),
+  including normalized attachment scale, unchanged orientation/position,
+  duplicate surface names, texture case/extension resolution, bounded action
+  frames, complete bolt/reload sequences and atomic import failure.
+- Eleven release-packager tests pass (`package-tests.log`), including explicit
+  exclusion of both local Urban Terror ZIPs.
+- The opt-in native client, built with `CSGOPEN_WEAPON_TEST=1` and a separate
+  `APPCLIENT`, reports `WEAPON_DONE FAILURES 0` (`test.log`). It resolves 160
+  first/third-person poses across ten weapon slots, two body/team selections
+  and four headings. All 128 firearm muzzle-heading comparisons pass. The
+  other checks cover team hands without duplicates, grenade projectile skins,
+  imported/native weapon switching, reload duration and disabled/original
+  profile fallback.
+- Visual inspection of `visual-client/world-weapons.0001.png` and ten
+  `first-*.0001.png` captures confirms the third/first-person appearances.
+  First-person tag axes are normalized like Q3 interpolation; retaining their
+  baked 3.7056 scale had incorrectly enlarged linked parts a second time.
+- The opt-in client also drove normal native action state for AK firing and
+  reload (`actions.log`), consuming 12 rounds (30 to 18) and returning to 30
+  after reload. `actions-client/ak-fire.0001.png`, `ak-reload.0001.png` and
+  `ak-ready.0001.png` show the muzzle flash, magazine animation and ready pose.
+  These are scripted native actions, not a physical keyboard playtest.
+- The canonical dedicated-loopback smoke with the production client reports
+  `SMOKE_DONE FAILURES 0` (`smoke.log`), including weapon/soldier pack enable
+  checks at spawn, respawn and map change. Respawn measured 2999 ms.
+- `git diff --check` passes. Asset submodules remain at their recorded commits,
+  and test clients/loopback servers exited. No commit, push or publication.
+
+Extended combat and all intermediate action poses remain manual playtesting
+work; the scripted checks above do not establish every animation transition.
+
+## 2026-10-11 — Visible grenade projectiles without countdown flashes
+
+Results are in `.csgopen/grenade-visuals-20261011/`.
+
+- Regenerated the local weapon pack. Imported HE/smoke projectile height is
+  now 5.266 world units (previously 1.632), independently of held weapon scale.
+- Built the production native client/server with `dev.sh build`.
+- All 13 importer unit tests pass.
+- The opt-in `CSGOPEN_MINE_TEST=1` client reports
+  `GRENADE_VISUAL_DONE FAILURES 0`: HE, smoke and launcher projectile models
+  load with readable bounds, remain fully opaque at four fuse times including
+  the camera/owner position, create no countdown emitter, and retain an
+  explosion effect. The same loopback run reports `SMOKE_DONE FAILURES 0`.
+- These are native model/effect checks, not a physical keyboard playtest.
+  The removed LIFE emitter includes its attached warning beep; bounce and
+  explosion emitters are unchanged. Physics, damage and fuse settings are
+  unchanged. Original-profile behavior remains conditional on csgopenweapons.
+- The production client also passes the canonical dedicated-loopback smoke
+  (`smoke.log`: `SMOKE_DONE FAILURES 0`). Both native runs exited cleanly.
+- `git diff --check` passes.
+
+## 2026-10-11 — Distinct compact model for MP9
+
+- The installed Urban Terror assets contain MAC-11 models, not an Uzi model.
+  MP9 now uses MAC-11; PP-Bizon keeps MP5K. Weapon rules are unchanged.
+- Regenerated the ignored local weapon ZIP. The source MAC-11 hold contains a
+  repeated `tag_laser`; the importer now computes rebuilt tag counts/offsets
+  from the emitted tag block rather than assuming all names are unique.
+- All 14 importer tests pass, including duplicate-tag offset/mesh preservation.
+- The existing opt-in native weapon client reports `WEAPON_DONE FAILURES 0`
+  with the new pack (`.csgopen/mp9-mac11-20261011/test.log`), covering 160 poses
+  and 128 firearm muzzle headings across all imported weapons.
+- Visually inspected `visual-client/first-plasma.png` and `world-weapons.png`
+  from the same output directory: MAC-11 appears in first person and character
+  previews. The visual run also reports `WEAPON_DONE FAILURES 0`.
+- Native test runs exited cleanly. `git diff --check` passes.
+
+## 2026-10-11 — Urban Terror names and PSG-1 primary
+
+Results are in `.csgopen/ut-arsenal-20261011/`.
+
+- Renamed existing TDM weapons to match their local models: MP5K, MAC-11,
+  AK-103, SR8, Benelli, Negev and HK69. Compared all pre-existing arsenal
+  settings with `arsenal-before.cfg`: every non-name setting is unchanged.
+- Retrieved the supplied sheet's CSV and saved SCAR-20 / SCAR-20 (scoped)
+  source rows in `config/csgopen/weapon-reference.json`. PSG-1 uses the
+  previously disabled Flamer slot: 80 torso damage, 4x headshots, 250 ms
+  cadence, 20 loaded + 40 reserve rounds and the source hold-to-fire flag.
+  Primary selection and secondary scope policy validate on client/server.
+  Bullet effects/sounds replace the flame/air-blast behavior only in TDM.
+- Imported 11 local weapon appearances and built production client/server
+  (`build.log`) plus the opt-in weapon client (`test-build.log`). All 14
+  importer unit tests pass.
+- `actions.log` reports `WEAPON_DONE FAILURES 0`: 176 first/third-person poses
+  and 144 firearm muzzle heading checks, including PSG-1. Existing weapon
+  switching, animation timing and original-profile fallback checks pass.
+- The dedicated-loopback native input run reports `PSG_DONE FAILURES 0`. It
+  confirms authoritative spawn with 20/40 ammunition, primary/secondary
+  permission, unscoped fire (20 to 16), scope state, scoped fire (16 to 12)
+  and reload to 20 with reserve consumption. The first harness attempt checked
+  spawn before the server was ready; the corrected harness waits for alive
+  state before starting actions. These are scripted native action states, not
+  physical keyboard input.
+- Visually inspected `actions-client/psg-reloaded.0001.png` and
+  `psg-scoped.0001.png`: the source model and scope view render correctly.
+- Production dedicated-loopback canonical smoke reports
+  `SMOKE_DONE FAILURES 0` (`smoke.log`), including the new names/statistics,
+  spawn/respawn and map change.
+
+Source armor penetration, falloff, recoil/inaccuracy conversion and mobility
+remain outside the prototype, as for the existing weapon profiles. New spread
+and reload tuning are documented in README/gameplay rather than attributed
+to the source sheet. Extended combat and all animation poses need playtesting.
+
+- The production expanded-arsenal loopback test also reports
+  `SMOKE_DONE FAILURES 0` (`arsenal.log`). It selects each existing primary
+  through the real equipment menu, then PSG-1, verifies server-assigned
+  20/40 ammunition, sidearm and both fire permissions, and completes common
+  respawn/map-change checks after restoring the default MP5K loadout. The
+  harness retries spectator exit after map readiness and restores that default
+  before common checks; earlier attempts are retained separately.
+- All native test clients and loopback servers exited. `git diff --check`
+  passes. Asset submodules remain untouched; no commit or publication.
+
+## Fixed PSG-1 and AK-103 zoom (2026-10-11)
+
+Evidence: `.csgopen/fixed-zoom-20261011/`.
+
+- Production client/server and the opt-in weapon test client build successfully.
+- Native `weaponzoomtest` reports `ZOOM_DONE FAILURES 0`: AK scoped and
+  unscoped spread match across six movement/posture states and three burst
+  bloom values. Wheel input preserves fixed PSG-1/AK zoom and still adjusts SR8.
+- Native model checks report `WEAPON_DONE FAILURES 0`.
+- The loopback action harness (retaining its earlier `PSG_*` log labels) tests
+  AK-103: 30/90 spawn ammunition, primary and scope permission, 30 to 20
+  unscoped shots, 20 to 10 scoped shots, positive scoped burst bloom, and
+  reload to 30 with reserve consumption. `PSG_DONE FAILURES 0`.
+- PSG-1 uses fixed 20-degree FOV; AK-103 uses fixed 60-degree FOV. AK zoom
+  retains primary spread, recoil and shot kickback, and adds no movement penalty.
+- Production canonical loopback smoke reports `SMOKE_DONE FAILURES 0`,
+  including fixed-zoom rules, spawn/respawn and map change. Its initial run
+  timed out after attempting spectator exit before map readiness; the wait
+  now retries spectator exit until alive. `git diff --check` passes.
+
+## Four-second TDM spawn protection (2026-10-11)
+
+Only `sv_spawnprotect` is overridden to 4000 ms in the TDM preset. Code
+inspection confirms the existing shoot/cook/objective interruption logic
+is unchanged. Human and bot respawn delays remain 3000 ms.
+
+Production loopback canonical smoke reports `SMOKE_DONE FAILURES 0` in
+`.csgopen/respawn-protection-20261011/smoke.log`, checking the synchronized
+protection duration and interruption settings before and after map change,
+as well as the existing spawn/respawn and gameplay rules. No C++ changes or
+rebuild were needed. `git diff --check` passes.
+
+## SPAS-12 shotgun appearance (2026-10-11)
+
+The shotgun now uses the Urban Terror `spas12` source and the SPAS-12
+in-game name, retaining its existing XM1014 statistics. Reimported the
+local-only weapon ZIP; the SPAS model has 109 animation frames and three
+linked first-person parts, with SWAT/desert hands and a third-person mesh.
+
+All seven weapon importer unit tests pass. The native model test reports
+`WEAPON_DONE FAILURES 0`; dedicated-loopback canonical smoke reports
+`SMOKE_DONE FAILURES 0`, including the new name and existing shotgun rules.
+Evidence is in `.csgopen/spas-20261011/smoke.log`. No C++ rebuild was required;
+`git diff --check` passes. Physical-input animation feel remains a manual check.
+
+## SPAS-12 misplaced first-person piece (2026-10-11)
+
+Source inspection found that the SPAS ejector exposes both `tag_main` and
+`tag_ejector`. The importer selected the first shared tag, attaching that piece
+to the main body. It now prefers the tag matching the moving part's name, with
+the existing shared-tag fallback. Reimported both team skins; ejector/main/slide
+links now use their respective tags. No gameplay parameters changed.
+
+Eight importer unit tests pass, including a regression for the ambiguous
+attachment. Native model checks report `WEAPON_DONE FAILURES 0` in
+`.csgopen/spas-attachment-20261011/actions.log`. Scripted firing/reload
+screenshots were captured for visual inspection; the initial idle capture
+still had the team menu overlay. No C++ rebuild was needed.
+
+## TDM unscoped sniper crosshair (2026-10-11)
+
+The shared HUD hide flag suppresses the unscoped crosshair and ammunition
+ring for living PSG-1/SR8 players in TDM. Scope, editing/menu pointers,
+other weapons and the original profile retain their existing behavior.
+Both pointer renderers consume this flag (code inspection). Weapon accuracy
+and fire parameters were not changed.
+
+Production and opt-in native clients build successfully. Canonical loopback
+smoke reports `SMOKE_DONE FAILURES 0`. Separate PSG-1 and SR8 native action
+runs assert the hidden unscoped flag and permitted scoped reticle, as well
+as ammunition, firing and reload; both report `PSG_DONE FAILURES 0` (shared
+harness labels) and `WEAPON_DONE FAILURES 0`. Visually inspected both unscoped
+reload-complete screenshots and the PSG scoped screenshot. Evidence is in
+`.csgopen/sniper-crosshair-20261011/`, including the `sr8/` subdirectory.
+`git diff --check` passes.
+
+## Weapon silhouette icons (2026-10-11)
+
+The local importer now includes the 11 matching Urban Terror monochrome
+icons as transparent PNGs, padded to square slots without stretching. The
+shared native `weaponicon` lookup is used by equipment selection/filter
+widgets, the HUD and the weapon wheel. Native HUD item icons use the same
+lookup; the mine, icon-disabled pack and original gameplay retain fallback
+icons. Pack readiness is separate so older packs remain usable.
+
+Production client/server build succeeds. Nine importer unit tests pass,
+including alpha/proportion preservation. Extended production canonical
+smoke reports `SMOKE_DONE FAILURES 0`, checking all 11 imported paths and
+mine/disabled-pack fallback before and after map change. Evidence is in
+`.csgopen/weapon-icons-20261011/smoke.log`.
+
+The first HUD capture occurred during map change while dead. A separate
+live production client run captured SPAS HUD and loadout/primary-choice
+menus in `visual/actions-client/`; visual inspection confirms the silhouette
+icons render in both places. That run reports `ICON_DONE FAILURES 0` as a
+completion marker, not an additional model/action test. `git diff --check`
+passes. Source icons stay in the ignored local-only pack, excluded from releases.
+
+## Integrated TDM Player Setup (2026-10-11)
+
+TDM Player Setup now places existing loadout controls below name/character,
+hiding colour, mixer and vanity controls. TDM loadout shortcuts resolve to
+the same page. Original-profile appearance/loadout pages retain their prior
+controls (guard inspection). Primary preview uses the selected weapon, with
+pistol fallback for a random or empty primary. No equipment rules changed.
+
+Production canonical loopback smoke reports `SMOKE_DONE FAILURES 0` in
+`.csgopen/player-setup-20261011/smoke.log`. The separate visual run reports
+`SETUP_DONE FAILURES 0`: valid selection, Save, Reset to current persisted
+settings and shortcut routing. The initial Reset assertion assumed deferred
+loadout persistence; inspection confirmed existing selections immediately
+update `playerloadweap`, so the harness was corrected without altering that
+behavior. Inspected integrated setup and weapon-choice screenshots at 640x480:
+name, character, equipment and Save/Reset fit within the panel. Evidence is
+in `visual/actions-client/`. No C++ rebuild needed; `git diff --check` passes.
