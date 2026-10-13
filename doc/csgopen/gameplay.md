@@ -761,8 +761,8 @@ weapon models remain upstream assets.
 
 This is a client presentation option. Actor dimensions, equipment, movement
 rules, damage values, map assets and protocol 285 are unchanged. Missing or
-disabled soldier models fall back to upstream characters. The ZIP is local
-and excluded from releases; see the import and attribution instructions in
+disabled soldier models fall back to upstream characters. The soldier and weapon ZIPs are tracked in Git
+and included in client releases; see the import and attribution instructions in
 the development README.
 
 ## Nomi Urban Terror e PSG-1 — 11 ottobre 2026

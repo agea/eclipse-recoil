@@ -2,8 +2,8 @@
 """Import local Urban Terror weapons as native first/third-person MD3 models.
 
 Only mesh, image, skin and named animation data are read. Source configuration
-files are never executed. The resulting ZIP is local-only and excluded from
-releases, like the optional soldier pack.
+files are never executed. The resulting ZIP is tracked and included in client
+releases, like the soldier pack.
 """
 
 import argparse
@@ -272,7 +272,7 @@ class Importer:
 def import_pack(source, output):
     importer = Importer(source)
     try:
-        manifest = {"format": 1, "source": "Urban Terror 4.3 / FrozenSand", "local_only": True,
+        manifest = {"format": 1, "source": "Urban Terror 4.3 / FrozenSand", "bundled": True,
                     "models": {weapon: importer.weapon(weapon, *source) for weapon, source in MAPPING.items()},
                     "inputs": importer.assets.used}
         for weapon, (folder, _) in MAPPING.items():
@@ -307,7 +307,7 @@ def import_pack(source, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("installation", type=Path)
-    parser.add_argument("--output", type=Path, default=ROOT / "data/csgopen/urbanterror-weapons.zip")
+    parser.add_argument("--output", type=Path, default=ROOT / "data/csgopen/weapons.zip")
     args = parser.parse_args()
     try:
         manifest = import_pack(args.installation, args.output)

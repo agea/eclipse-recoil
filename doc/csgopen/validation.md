@@ -2930,7 +2930,7 @@ clips retain synchronized vertex and tag frames. Each engine animation receives
 exactly one definition per moving model part, avoiding random fallback poses.
 
 The local pack is installed as the Git-ignored
-`data/csgopen/urbanterror-soldiers.zip` (approximately 44 MiB). Its manifest
+`data/csgopen/soldiers.zip` (approximately 44 MiB). Its manifest
 records input archives and hashes. The release packager explicitly excludes
 this filename, including when packaging a developer checkout. The source
 `q3ut4/readme43.txt` requires permission for media reuse; importing the assets
@@ -3301,3 +3301,19 @@ update `playerloadweap`, so the harness was corrected without altering that
 behavior. Inspected integrated setup and weapon-choice screenshots at 640x480:
 name, character, equipment and Save/Reset fit within the panel. Evidence is
 in `visual/actions-client/`. No C++ rebuild needed; `git diff --check` passes.
+
+## Bundled Urban Terror player and weapon packs (2026-10-13)
+
+At the project owner's request, the two adapted Urban Terror ZIPs are now
+tracked in Git and included in client release packages on all supported
+platforms. Packaging requires both files. Importers mark the packs as bundled;
+existing ZIP manifests were updated without changing mesh, texture or animation
+content, and source attribution remains intact. Source map ZIPs stay ignored.
+
+Executed validation: 11 release packaging tests and 16 importer tests passed.
+Both real ZIPs passed CRC integrity checks and were copied byte-for-byte by the
+release data-copy function (SHA-256 verified). `git diff --check` passed.
+The installer suite initially could not bind loopback inside the sandbox;
+its subsequent run passed 13 tests with 3 Windows-only tests skipped, using
+the necessary sandbox exception. Full native release
+archives and cross-platform gameplay have not been rebuilt for this change.

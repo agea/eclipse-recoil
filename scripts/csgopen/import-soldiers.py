@@ -2,7 +2,7 @@
 """Adapt locally installed Urban Terror 4.3 soldiers to Eclipse Recoil MD3s.
 
 Source configurations are parsed as data, never executed. Derived assets remain
-in an ignored local ZIP; the release packager deliberately excludes that ZIP.
+in a tracked ZIP included in client release packages.
 """
 
 import argparse
@@ -243,7 +243,7 @@ def import_pack(source, output):
     assets = Assets(source)
     entries = {}
     manifest = {"format": 1, "source": "Urban Terror 4.3 / FrozenSand",
-                "local_only": True, "teams": {"alpha": "swat_w", "omega": "desert_w"}, "models": {}}
+                "bundled": True, "teams": {"alpha": "swat_w", "omega": "desert_w"}, "models": {}}
     try:
         for actor in ("orion", "athena"):
             base = f"models/players/{actor}"
@@ -328,7 +328,7 @@ def import_pack(source, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("installation", type=Path)
-    parser.add_argument("--output", type=Path, default=ROOT / "data/csgopen/urbanterror-soldiers.zip")
+    parser.add_argument("--output", type=Path, default=ROOT / "data/csgopen/soldiers.zip")
     args = parser.parse_args()
     try:
         manifest = import_pack(args.installation, args.output)

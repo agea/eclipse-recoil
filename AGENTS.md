@@ -48,12 +48,12 @@ CS:GO movement or weapons.
   XQuartz as default solutions. Preserve Linux and Windows build paths.
 - Do not modify assets or maps in submodules. Use recorded commits:
   `git submodule update --init --recursive`, never `--remote`.
-- Optional Urban Terror soldier assets are imported locally with
-  `scripts/csgopen/import-soldiers.py`, and weapon assets with
-  `scripts/csgopen/import-weapons.py`. Keep the generated
-  `data/csgopen/urbanterror-soldiers.zip` and `urbanterror-weapons.zip`
-  ignored and excluded from releases;
-  do not commit or redistribute those third-party assets without permission.
+- Urban Terror soldier and weapon assets are tracked in
+  `data/csgopen/soldiers.zip` and `weapons.zip` and
+  required in client release packages, as requested by the project owner.
+  Regenerate them with `scripts/csgopen/import-soldiers.py` and
+  `scripts/csgopen/import-weapons.py`. Preserve source attribution and manifests;
+  these third-party assets are not covered by the Eclipse Recoil source license.
 - Keep logs, runtime profiles, and local results in `.csgopen/` (Git-ignored).
 - Bind test servers to loopback, without public master registration or cloud
   deployment.

@@ -45,6 +45,15 @@ removes the downloaded parts and temporary joined archive; no admin privileges
 or automatic game launch are required. The app's macOS approval requirements
 are described below.
 
+## Bundled Urban Terror assets
+
+Client packages include the tracked `data/csgopen/soldiers.zip`
+and `weapons.zip` on every supported platform. The TDM client
+mounts and enables them automatically; players do not need a local Urban Terror
+installation. Packaging fails if either pack is missing. Source attribution and
+import manifests remain inside the ZIPs; these assets retain their third-party
+ownership and are not covered by the Eclipse Recoil source license.
+
 ## Packages and manual downloads
 
 Every push to `master` runs `.github/workflows/release.yml`. Five native client

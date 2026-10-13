@@ -4,6 +4,9 @@
 data/csgopen/maps/
 data/csgopen/imported/
 data/csgopen/*.zip
+# Bundled Urban Terror player and weapon packs.
+!data/csgopen/soldiers.zip
+!data/csgopen/weapons.zip
 __pycache__/
 *.bin
 *.exe

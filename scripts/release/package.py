@@ -24,7 +24,7 @@ def run(*args, env=None):
 def copy_tree(source, destination):
     # Asset submodules contain .git files pointing outside the archive.
     shutil.copytree(source, destination, ignore=shutil.ignore_patterns(
-        ".git", ".github", ".DS_Store", "__pycache__", "urbanterror-soldiers.zip", "urbanterror-weapons.zip"))
+        ".git", ".github", ".DS_Store", "__pycache__"))
 
 
 def copy_library(source, destination, origins):
@@ -254,7 +254,8 @@ def package(args):
     shutil.copy2(ROOT / "readme.md", game / "README.md")
     required = ["data/maps/echo.mpz", "config/csgopen/tdm.cfg", "config/csgopen/client.cfg",
                 "config/csgopen/branding.cfg", "data/csgopen/branding/icon.png",
-                "data/csgopen/branding/splash.png", "data/csgopen/branding/logo.png"]
+                "data/csgopen/branding/splash.png", "data/csgopen/branding/logo.png",
+                "data/csgopen/soldiers.zip", "data/csgopen/weapons.zip"]
     for path in required:
         if not (game / path).is_file():
             raise RuntimeError(f"Incomplete game package: {path}")

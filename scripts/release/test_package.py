@@ -37,15 +37,15 @@ class PackageChecks(unittest.TestCase):
         path.write_bytes(b"fixture")
         return path
 
-    def test_local_urban_terror_assets_are_excluded_from_releases(self):
+    def test_bundled_urban_terror_assets_are_included_in_releases(self):
         source = self.root / "data"
-        self.file("data/csgopen/urbanterror-soldiers.zip")
-        self.file("data/csgopen/urbanterror-weapons.zip")
+        self.file("data/csgopen/soldiers.zip")
+        self.file("data/csgopen/weapons.zip")
         self.file("data/csgopen/branding/icon.png")
         destination = self.root / "release-data"
         pack.copy_tree(source, destination)
-        self.assertFalse((destination / "csgopen/urbanterror-soldiers.zip").exists())
-        self.assertFalse((destination / "csgopen/urbanterror-weapons.zip").exists())
+        self.assertTrue((destination / "csgopen/soldiers.zip").exists())
+        self.assertTrue((destination / "csgopen/weapons.zip").exists())
         self.assertTrue((destination / "csgopen/branding/icon.png").exists())
 
     def test_linux_keeps_audio_closure_but_uses_host_glibc_and_gpu(self):
